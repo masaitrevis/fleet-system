@@ -24,6 +24,8 @@ CREATE TABLE staff (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     staff_no VARCHAR(50) UNIQUE,
     staff_name VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    phone VARCHAR(50),
     designation VARCHAR(100),
     department VARCHAR(100),
     branch VARCHAR(100),
