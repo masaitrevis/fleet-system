@@ -32,6 +32,19 @@ export const initDatabase = async () => {
 const createTables = async () => {
   if (!pool) throw new Error('Database not initialized');
 
+  // Drop existing tables with wrong types and recreate
+  // This is a fresh start - data will be cleared
+  await pool.query(`
+    DROP TABLE IF EXISTS requisitions CASCADE;
+    DROP TABLE IF EXISTS repairs CASCADE;
+    DROP TABLE IF EXISTS fuel_records CASCADE;
+    DROP TABLE IF EXISTS routes CASCADE;
+    DROP TABLE IF EXISTS vehicles CASCADE;
+    DROP TABLE IF EXISTS staff CASCADE;
+    DROP TABLE IF EXISTS users CASCADE;
+    DROP TABLE IF EXISTS analytics_cache CASCADE;
+  `);
+
   // Users table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
