@@ -45,6 +45,12 @@ router.post('/', upload.single('file'), async (req, res) => {
           case 'repairs template':
             results.repairs = await importRepairs(data);
             break;
+          case 'accidents':
+            results.accidents = await importAccidents(data);
+            break;
+          case 'requisitions':
+            results.requisitions = await importRequisitions(data);
+            break;
           default:
             console.log(`Unknown sheet: ${sheetName}`);
         }
@@ -379,6 +385,174 @@ async function importRepairs(data: any[][]) {
       console.error('Repair row error:', e.message, row);
     }
   }
+  return count;
+}
+
+// Generate case number for accidents
+const generateCaseNumber = async () => {
+  const year = new Date().getFullYear();
+  const result = await query(
+    "SELECT COUNT(*) as count FROM accidents WHERE EXTRACT(YEAR FROM created_at) = $1",
+    [year]
+  );
+  const count = parseInt(result[0].count) + 1;
+  return `ACC-${year}-${String(count).padStart(4, '0')}`;
+};
+
+async function importAccidents(data: any[][]) {
+  const headers = data[0].map((h: string) => h.toLowerCase().trim());
+  console.log('Accident headers:', headers);
+  
+  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  
+  const caseIdx = getCol('case_number');
+  const dateIdx = getCol('accident_date');
+  const gpsIdx = getCol('gps_location');
+  const regIdx = getCol('registration');
+  const driverIdx = getCol('driver');
+  const typeIdx = getCol('accident_type');
+  const severityIdx = getCol('severity');
+  const injuriesIdx = getCol('injuries');
+  const policeIdx = getCol('police');
+  const thirdPartyIdx = getCol('third_party');
+  const weatherIdx = getCol('weather');
+  const roadIdx = getCol('road');
+  const descIdx = getCol('description');
+  const statusIdx = getCol('status');
+
+  let count = 0;
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    
+    if (!row[0]) continue;
+
+    try {
+      // Look up vehicle by registration
+      let vehicleId = null;
+      const regRef = regIdx >= 0 ? row[regIdx] : '';
+      if (regRef) {
+        const vehRes = await query('SELECT id FROM vehicles WHERE registration_num = $1', [regRef]);
+        if (vehRes.length > 0) vehicleId = vehRes[0].id;
+      }
+      
+      // Look up driver by staff_no
+      let driverId = null;
+      const driverRef = driverIdx >= 0 ? row[driverIdx] : '';
+      if (driverRef) {
+        const drvRes = await query('SELECT id FROM staff WHERE staff_no = $1', [driverRef]);
+        if (drvRes.length > 0) driverId = drvRes[0].id;
+      }
+
+      const caseNumber = caseIdx >= 0 && row[caseIdx] 
+        ? row[caseIdx] 
+        : await generateCaseNumber();
+      
+      const id = uuidv4();
+      await query(`
+        INSERT INTO accidents 
+        (id, case_number, accident_date, gps_location, vehicle_id, driver_id,
+         accident_type, severity, injuries_reported, police_notified, 
+         third_party_involved, weather_condition, road_condition, 
+         incident_description, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ON CONFLICT (case_number) DO UPDATE SET
+          accident_date = EXCLUDED.accident_date,
+          incident_description = EXCLUDED.incident_description,
+          updated_at = CURRENT_TIMESTAMP
+      `, [
+        id,
+        caseNumber,
+        dateIdx >= 0 ? row[dateIdx] : new Date().toISOString(),
+        gpsIdx >= 0 ? row[gpsIdx] : null,
+        vehicleId,
+        driverId,
+        typeIdx >= 0 ? row[typeIdx] : 'Collision',
+        severityIdx >= 0 ? row[severityIdx] : 'Minor',
+        injuriesIdx >= 0 ? (row[injuriesIdx] === true || row[injuriesIdx] === 'true') : false,
+        policeIdx >= 0 ? (row[policeIdx] === true || row[policeIdx] === 'true') : false,
+        thirdPartyIdx >= 0 ? (row[thirdPartyIdx] === true || row[thirdPartyIdx] === 'true') : false,
+        weatherIdx >= 0 ? row[weatherIdx] : 'Clear',
+        roadIdx >= 0 ? row[roadIdx] : 'Dry',
+        descIdx >= 0 ? row[descIdx] : '',
+        statusIdx >= 0 ? row[statusIdx] : 'Reported'
+      ]);
+      count++;
+    } catch (e: any) {
+      console.error('Accident row error:', e.message, row);
+    }
+  }
+  
+  console.log(`Imported ${count} accidents`);
+  return count;
+}
+
+async function importRequisitions(data: any[][]) {
+  const headers = data[0].map((h: string) => h.toLowerCase().trim());
+  console.log('Requisition headers:', headers);
+  
+  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  
+  const requesterIdx = getCol('requested_by');
+  const originIdx = getCol('departure');
+  const destIdx = getCol('destination');
+  const purposeIdx = getCol('purpose');
+  const travelDateIdx = getCol('travel_date');
+  const travelTimeIdx = getCol('travel_time');
+  const returnDateIdx = getCol('return_date');
+  const returnTimeIdx = getCol('return_time');
+  const passengersIdx = getCol('passengers');
+  const namesIdx = getCol('passenger_names');
+  const statusIdx = getCol('status');
+
+  let count = 0;
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    
+    if (!row[0]) continue;
+
+    try {
+      // Look up requester by staff_no
+      let requesterId = null;
+      const reqRef = requesterIdx >= 0 ? row[requesterIdx] : '';
+      if (reqRef) {
+        const reqRes = await query('SELECT id FROM staff WHERE staff_no = $1', [reqRef]);
+        if (reqRes.length > 0) requesterId = reqRes[0].id;
+      }
+
+      const id = uuidv4();
+      const reqNumber = `REQ-${new Date().getFullYear()}-${String(i).padStart(4, '0')}`;
+      
+      await query(`
+        INSERT INTO requisitions 
+        (id, requisition_number, requested_by, department_id, purpose,
+         place_of_departure, destination, travel_date, travel_time,
+         return_date, return_time, num_passengers, passenger_names, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      `, [
+        id,
+        reqNumber,
+        requesterId,
+        null, // department_id - can be looked up from staff
+        purposeIdx >= 0 ? row[purposeIdx] : '',
+        originIdx >= 0 ? row[originIdx] : '',
+        destIdx >= 0 ? row[destIdx] : '',
+        travelDateIdx >= 0 ? row[travelDateIdx] : new Date().toISOString().split('T')[0],
+        travelTimeIdx >= 0 ? row[travelTimeIdx] : '09:00',
+        returnDateIdx >= 0 ? row[returnDateIdx] : new Date().toISOString().split('T')[0],
+        returnTimeIdx >= 0 ? row[returnTimeIdx] : '17:00',
+        passengersIdx >= 0 ? parseInt(row[passengersIdx]) || 1 : 1,
+        namesIdx >= 0 ? row[namesIdx] : '',
+        statusIdx >= 0 ? row[statusIdx] : 'Draft'
+      ]);
+      count++;
+    } catch (e: any) {
+      console.error('Requisition row error:', e.message, row);
+    }
+  }
+  
+  console.log(`Imported ${count} requisitions`);
   return count;
 }
 
