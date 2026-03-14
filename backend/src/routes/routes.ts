@@ -19,8 +19,9 @@ router.get('/', async (req, res) => {
       ORDER BY r.route_date DESC
     `);
     res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch routes' });
+  } catch (error: any) {
+    console.error('Routes GET error:', error);
+    res.status(500).json({ error: 'Failed to fetch routes', details: error.message });
   }
 });
 
@@ -34,8 +35,8 @@ router.post('/', async (req, res) => {
 
   try {
     // Calculate actual consumption rate if not provided
-    const calcRate = actual_km && actual_fuel ? (actual_km / actual_fuel).toFixed(2) : actual_consumption_rate;
-    const calcVariance = target_fuel_consumption && actual_fuel ? (actual_fuel - target_fuel_consumption).toFixed(2) : variance;
+    const calcRate = actual_km && actual_fuel ? parseFloat((actual_km / actual_fuel).toFixed(2)) : (actual_consumption_rate || 0);
+    const calcVariance = target_fuel_consumption && actual_fuel ? parseFloat((actual_fuel - target_fuel_consumption).toFixed(2)) : (variance || 0);
 
     const id = uuidv4();
     await query(`
@@ -43,36 +44,38 @@ router.post('/', async (req, res) => {
         id, route_date, route_name, driver1_id, driver2_id, co_driver_id,
         vehicle_id, target_km, actual_km, target_fuel_consumption, actual_fuel,
         target_consumption_rate, actual_consumption_rate, variance, comments
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
     `, [
-      id, route_date, route_name, driver1_id, driver2_id, co_driver_id,
-      vehicle_id, target_km, actual_km, target_fuel_consumption, actual_fuel,
-      target_consumption_rate, calcRate, calcVariance, comments
+      id, route_date, route_name, driver1_id || null, driver2_id || null, co_driver_id || null,
+      vehicle_id || null, target_km || 0, actual_km || 0, target_fuel_consumption || 0, actual_fuel || 0,
+      target_consumption_rate || 0, calcRate, calcVariance, comments || ''
     ]);
 
     // Update vehicle mileage
     if (actual_km && vehicle_id) {
       await query(`
         UPDATE vehicles 
-        SET current_mileage = current_mileage + ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
+        SET current_mileage = current_mileage + $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
       `, [actual_km, vehicle_id]);
     }
 
-    const result = await query('SELECT * FROM routes WHERE id = ?', [id]);
+    const result = await query('SELECT * FROM routes WHERE id = $1', [id]);
     res.status(201).json(result[0]);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create route' });
+  } catch (error: any) {
+    console.error('Routes POST error:', error);
+    res.status(500).json({ error: 'Failed to create route', details: error.message });
   }
 });
 
 // Delete route
 router.delete('/:id', async (req, res) => {
   try {
-    await query('DELETE FROM routes WHERE id = ?', [req.params.id]);
+    await query('DELETE FROM routes WHERE id = $1', [req.params.id]);
     res.json({ message: 'Route deleted' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete route' });
+  } catch (error: any) {
+    console.error('Routes DELETE error:', error);
+    res.status(500).json({ error: 'Failed to delete route', details: error.message });
   }
 });
 
