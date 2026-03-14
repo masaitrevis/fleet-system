@@ -185,8 +185,77 @@ async function importStaff(data: any[][]) {
 }
 
 async function importRoutes(data: any[][]) {
+  const headers = data[0].map((h: string) => h.toLowerCase().trim());
+  console.log('Routes headers:', headers);
+  
+  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  
+  const dateIdx = getCol('route_date');
+  const nameIdx = getCol('route_name');
+  const driverIdx = getCol('driver1');
+  const vehicleIdx = getCol('vehicle');
+  const targetKmIdx = getCol('target_km');
+  const actualKmIdx = getCol('actual_km');
+  const targetFuelIdx = getCol('target_fuel');
+  const actualFuelIdx = getCol('actual_fuel');
+  const varianceIdx = getCol('variance');
+
   let count = 0;
-  console.log('Routes import not yet implemented');
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const routeName = nameIdx >= 0 ? row[nameIdx] : row[1];
+    
+    if (!routeName) continue;
+
+    try {
+      // Look up driver by staff_no or name
+      let driverId = null;
+      const driverRef = driverIdx >= 0 ? row[driverIdx] : '';
+      if (driverRef) {
+        const driverRes = await query('SELECT id FROM staff WHERE staff_no = $1 OR staff_name = $1', [driverRef]);
+        if (driverRes.length > 0) driverId = driverRes[0].id;
+      }
+      
+      // Look up vehicle by registration_num
+      let vehicleId = null;
+      const vehicleRef = vehicleIdx >= 0 ? row[vehicleIdx] : '';
+      if (vehicleRef) {
+        const vehRes = await query('SELECT id FROM vehicles WHERE registration_num = $1', [vehicleRef]);
+        if (vehRes.length > 0) vehicleId = vehRes[0].id;
+      }
+
+      const id = uuidv4();
+      const targetKm = targetKmIdx >= 0 ? parseFloat(row[targetKmIdx]) || 0 : 0;
+      const actualKm = actualKmIdx >= 0 ? parseFloat(row[actualKmIdx]) || 0 : 0;
+      const targetFuel = targetFuelIdx >= 0 ? parseFloat(row[targetFuelIdx]) || 0 : 0;
+      const actualFuel = actualFuelIdx >= 0 ? parseFloat(row[actualFuelIdx]) || 0 : 0;
+      const variance = varianceIdx >= 0 ? parseFloat(row[varianceIdx]) || 0 : (actualFuel - targetFuel);
+      
+      await query(`
+        INSERT INTO routes (id, route_date, route_name, driver1_id, vehicle_id, 
+          target_km, actual_km, target_fuel_consumption, actual_fuel, variance, comments)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [
+        id,
+        dateIdx >= 0 ? row[dateIdx] : new Date().toISOString().split('T')[0],
+        routeName,
+        driverId,
+        vehicleId,
+        targetKm,
+        actualKm,
+        targetFuel,
+        actualFuel,
+        variance,
+        ''
+      ]);
+      count++;
+    } catch (e: any) {
+      console.error('Routes row error:', e.message, row);
+    }
+  }
+  
+  console.log(`Imported ${count} routes`);
   return count;
 }
 
