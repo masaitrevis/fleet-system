@@ -1,0 +1,6 @@
+name = "fleet-g4s"
+compatibility_date = "2024-01-01"
+
+[build]
+command = "npm install && npm run build"
+output_directory = "dist"
