@@ -47,19 +47,30 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 export default function Dashboard({ apiUrl }: DashboardProps) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const token = localStorage.getItem('token');
 
-  useEffect(() => {
+  const fetchStats = () => {
+    setLoading(true);
     fetch(`${apiUrl}/dashboard/stats`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(r => r.json())
       .then(data => {
+        console.log('Dashboard stats:', data);
         setStats(data);
+        setLastUpdated(new Date());
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(err => {
+        console.error('Dashboard error:', err);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchStats();
   }, [apiUrl, token]);
 
   if (loading) return <div className="text-center py-12">Loading...</div>;
@@ -85,7 +96,23 @@ export default function Dashboard({ apiUrl }: DashboardProps) {
 
   return (
     <div>
-      <h2 className="text-3xl font-bold text-gray-800 mb-6">Dashboard</h2>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">Dashboard</h2>
+        <div className="flex items-center gap-3">
+          {lastUpdated && (
+            <span className="text-sm text-gray-500">
+              Updated: {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+          <button
+            onClick={fetchStats}
+            disabled={loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? 'Refreshing...' : '🔄 Refresh'}
+          </button>
+        </div>
+      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
