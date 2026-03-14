@@ -14,6 +14,7 @@ import fuelRoutes from './routes/fuel';
 import repairRoutes from './routes/repairs';
 import uploadRoutes from './routes/upload';
 import dashboardRoutes from './routes/dashboard';
+import adminRoutes from './routes/admin';
 
 dotenv.config();
 
@@ -54,6 +55,7 @@ app.use('/api/fuel', authenticateToken, fuelRoutes);
 app.use('/api/repairs', authenticateToken, repairRoutes);
 app.use('/api/upload', authenticateToken, uploadRoutes);
 app.use('/api/dashboard', authenticateToken, dashboardRoutes);
+app.use('/api/admin', authenticateToken, adminRoutes);
 
 // Health check (public)
 app.get('/api/health', (req, res) => {
