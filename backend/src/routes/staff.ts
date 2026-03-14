@@ -28,14 +28,14 @@ router.get('/drivers', async (req, res) => {
 
 // Create staff
 router.post('/', async (req, res) => {
-  const { staff_no, staff_name, designation, department, branch, role, comments } = req.body;
+  const { staff_no, staff_name, email, phone, designation, department, branch, role, comments } = req.body;
   
   try {
     const id = uuidv4();
     await query(`
-      INSERT INTO staff (id, staff_no, staff_name, designation, department, branch, role, comments)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, staff_no, staff_name, designation, department, branch, role, comments]);
+      INSERT INTO staff (id, staff_no, staff_name, email, phone, designation, department, branch, role, comments)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, staff_no, staff_name, email, phone, designation, department, branch, role, comments]);
     
     const result = await query('SELECT * FROM staff WHERE id = ?', [id]);
     res.status(201).json(result[0]);
