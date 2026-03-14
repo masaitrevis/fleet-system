@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { query } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 import emailService from '../services/email';
-import smsService from '../services/sms';
 
 const router = Router();
 
@@ -66,9 +65,8 @@ router.post('/', async (req, res) => {
     // Get the created requisition
     const result = await query('SELECT * FROM requisitions WHERE id = ?', [id]);
     
-    // Send notifications
+    // Send email notification
     await emailService.sendRequisitionRequest(staff.staff_name, req.body);
-    await smsService.sendRequisitionSMS(staff.staff_name, place_of_departure, destination);
 
     res.status(201).json(result[0]);
   } catch (error) {
@@ -157,7 +155,6 @@ router.post('/:id/approve', async (req: any, res) => {
 
     if (result.length > 0) {
       await emailService.sendApprovalNotification(result[0].staff_name, status, reason);
-      await smsService.sendApprovalSMS(status);
     }
 
     res.json({ message: `Requisition ${status}`, requisition: result[0] });
@@ -196,7 +193,6 @@ router.post('/:id/allocate', async (req: any, res) => {
         result[0].registration_num,
         result[0].driver_name
       );
-      await smsService.sendVehicleAllocatedSMS(result[0].registration_num, result[0].driver_name);
     }
 
     res.json({ message: 'Vehicle allocated', requisition: result[0] });
@@ -249,7 +245,6 @@ router.post('/:id/inspection', async (req: any, res) => {
         result[0].driver_name,
         passed
       );
-      await smsService.sendInspectionSMS(result[0].registration_num, passed);
     }
 
     res.json({ message: 'Inspection submitted', passed, requisition: result[0] });
@@ -300,7 +295,6 @@ router.post('/:id/close', async (req: any, res) => {
         result[0].registration_num,
         distance
       );
-      await smsService.sendTripCompletedSMS(result[0].registration_num, distance);
     }
 
     res.json({ message: 'Trip closed', distance, requisition: result[0] });
