@@ -9,10 +9,12 @@ import Fuel from './components/Fuel';
 import Repairs from './components/Repairs';
 import Upload from './components/Upload';
 import Reports from './components/Reports';
+import RequisitionModule from './components/requisition/RequisitionModule';
 
-export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports';
+export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'requisitions';
 
-const API_URL = 'http://localhost:3001/api';
+// Force correct API URL - env vars not reliable in Netlify
+const API_URL = 'https://fleet-api-0272.onrender.com/api';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -24,7 +26,8 @@ function AppContent() {
 
   const navItems: { key: View; label: string; icon: string; roles: string[] }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'viewer'] },
-    { key: 'fleet', label: 'Fleet', icon: '🚗', roles: ['admin', 'manager', 'viewer'] },
+    { key: 'requisitions', label: 'Vehicle Requisition', icon: '🚗', roles: ['admin', 'manager', 'viewer'] },
+    { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer'] },
     { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager'] },
     { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer'] },
     { key: 'fuel', label: 'Fuel', icon: '⛽', roles: ['admin', 'manager', 'viewer'] },
@@ -38,6 +41,7 @@ function AppContent() {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard': return <Dashboard apiUrl={API_URL} />;
+      case 'requisitions': return <RequisitionModule apiUrl={API_URL} user={user} />;
       case 'fleet': return <Fleet apiUrl={API_URL} />;
       case 'staff': return <Staff apiUrl={API_URL} />;
       case 'routes': return <Routes apiUrl={API_URL} />;
