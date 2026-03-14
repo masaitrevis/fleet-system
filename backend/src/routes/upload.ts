@@ -23,22 +23,34 @@ router.post('/', upload.single('file'), async (req, res) => {
       
       if (data.length < 2) continue; // Skip empty sheets
 
-      switch (sheetName) {
-        case 'Fleet':
-          results.fleet = await importFleet(data);
-          break;
-        case 'Staff':
-          results.staff = await importStaff(data);
-          break;
-        case 'Routes':
-          results.routes = await importRoutes(data);
-          break;
-        case 'TOTAL FUEL TEMPLATE':
-          results.fuel = await importFuel(data);
-          break;
-        case 'Repairs Template':
-          results.repairs = await importRepairs(data);
-          break;
+      console.log(`Processing sheet: ${sheetName}, rows: ${data.length}`);
+
+      try {
+        switch (sheetName.toLowerCase()) {
+          case 'vehicles':
+          case 'fleet':
+            results.vehicles = await importVehicles(data);
+            break;
+          case 'staff':
+            results.staff = await importStaff(data);
+            break;
+          case 'routes':
+            results.routes = await importRoutes(data);
+            break;
+          case 'fuel':
+          case 'total fuel template':
+            results.fuel = await importFuel(data);
+            break;
+          case 'repairs':
+          case 'repairs template':
+            results.repairs = await importRepairs(data);
+            break;
+          default:
+            console.log(`Unknown sheet: ${sheetName}`);
+        }
+      } catch (sheetError: any) {
+        console.error(`Error processing ${sheetName}:`, sheetError);
+        results[sheetName] = { error: sheetError.message };
       }
     }
 
@@ -52,52 +64,121 @@ router.post('/', upload.single('file'), async (req, res) => {
   }
 });
 
-async function importFleet(data: any[][]) {
-  const headers = data[0];
+async function importVehicles(data: any[][]) {
+  const headers = data[0].map((h: string) => h.toLowerCase().trim());
+  console.log('Vehicle headers:', headers);
+  
+  // Find column indices
+  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  
+  const regIdx = getCol('registration');
+  const yearManIdx = getCol('manufacture');
+  const yearPurIdx = getCol('purchase');
+  const makeIdx = getCol('make');
+  const ownershipIdx = getCol('ownership');
+  const deptIdx = getCol('department');
+  const branchIdx = getCol('branch');
+  const minorIdx = getCol('minor');
+  const mediumIdx = getCol('medium');
+  const majorIdx = getCol('major');
+  const rateIdx = getCol('consumption');
+  const statusIdx = getCol('status');
+  const mileageIdx = getCol('mileage');
+
   let count = 0;
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[0]) continue; // Skip empty rows
+    const regNum = regIdx >= 0 ? row[regIdx] : row[0];
+    
+    if (!regNum) continue;
 
     try {
       const id = uuidv4();
       await query(`
-        INSERT OR REPLACE INTO vehicles (
+        INSERT INTO vehicles (
           id, registration_num, year_of_manufacture, year_of_purchase,
           replacement_mileage, replacement_age, make_model, ownership,
           department, branch, minor_service_interval, medium_service_interval,
-          major_service_interval, target_consumption_rate, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
+          major_service_interval, target_consumption_rate, status, current_mileage
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        ON CONFLICT (registration_num) DO UPDATE SET
+          year_of_manufacture = EXCLUDED.year_of_manufacture,
+          make_model = EXCLUDED.make_model,
+          updated_at = CURRENT_TIMESTAMP
       `, [
-        id, row[0], parseInt(row[1]) || null, parseInt(row[2]) || null,
-        parseInt(row[3]) || null, parseInt(row[4]) || null, row[5], row[6],
-        row[7], row[8], parseInt(row[9]) || 5000, parseInt(row[10]) || 15000,
-        parseInt(row[11]) || 30000, parseFloat(row[12]) || 8.0
+        id, 
+        String(regNum).trim(), 
+        yearManIdx >= 0 ? parseInt(row[yearManIdx]) || null : null, 
+        yearPurIdx >= 0 ? parseInt(row[yearPurIdx]) || null : null,
+        200000, // replacement_mileage
+        10, // replacement_age
+        makeIdx >= 0 ? row[makeIdx] : 'Unknown', 
+        ownershipIdx >= 0 ? row[ownershipIdx] : 'Company',
+        deptIdx >= 0 ? row[deptIdx] : 'Transport', 
+        branchIdx >= 0 ? row[branchIdx] : 'Nairobi HQ',
+        minorIdx >= 0 ? parseInt(row[minorIdx]) || 5000 : 5000, 
+        mediumIdx >= 0 ? parseInt(row[mediumIdx]) || 15000 : 15000,
+        majorIdx >= 0 ? parseInt(row[majorIdx]) || 30000 : 30000, 
+        rateIdx >= 0 ? parseFloat(row[rateIdx]) || 8.0 : 8.0,
+        statusIdx >= 0 ? row[statusIdx] : 'Active',
+        mileageIdx >= 0 ? parseInt(row[mileageIdx]) || 0 : 0
       ]);
       count++;
-    } catch (e) {
-      console.error('Fleet row error:', e);
+    } catch (e: any) {
+      console.error('Vehicle row error:', e.message, row);
     }
   }
   return count;
 }
 
 async function importStaff(data: any[][]) {
+  const headers = data[0].map((h: string) => h.toLowerCase().trim());
+  console.log('Staff headers:', headers);
+  
+  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  
+  const staffNoIdx = getCol('staff_no');
+  const nameIdx = getCol('name');
+  const emailIdx = getCol('email');
+  const phoneIdx = getCol('phone');
+  const desigIdx = getCol('designation');
+  const deptIdx = getCol('department');
+  const branchIdx = getCol('branch');
+  const roleIdx = getCol('role');
+
   let count = 0;
+  
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[1]) continue;
+    const staffName = nameIdx >= 0 ? row[nameIdx] : row[1];
+    
+    if (!staffName) continue;
 
     try {
       const id = uuidv4();
       await query(`
-        INSERT OR IGNORE INTO staff (id, staff_no, staff_name, designation, department, branch, role, comments)
-        VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, 'Driver'), ?)
-      `, [id, row[1], row[2], row[3], row[4], row[5], row[3], row[6]]);
+        INSERT INTO staff (id, staff_no, staff_name, email, phone, designation, department, branch, role, comments)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (staff_no) DO UPDATE SET
+          staff_name = EXCLUDED.staff_name,
+          email = EXCLUDED.email,
+          updated_at = CURRENT_TIMESTAMP
+      `, [
+        id, 
+        staffNoIdx >= 0 ? row[staffNoIdx] : `ST${1000 + i}`, 
+        staffName,
+        emailIdx >= 0 ? row[emailIdx] : null,
+        phoneIdx >= 0 ? row[phoneIdx] : null,
+        desigIdx >= 0 ? row[desigIdx] : 'Driver',
+        deptIdx >= 0 ? row[deptIdx] : 'Transport',
+        branchIdx >= 0 ? row[branchIdx] : 'Nairobi HQ',
+        roleIdx >= 0 ? row[roleIdx] : 'Driver',
+        ''
+      ]);
       count++;
-    } catch (e) {
-      console.error('Staff row error:', e);
+    } catch (e: any) {
+      console.error('Staff row error:', e.message, row);
     }
   }
   return count;
@@ -105,69 +186,128 @@ async function importStaff(data: any[][]) {
 
 async function importRoutes(data: any[][]) {
   let count = 0;
-  // Routes require vehicle/driver lookups - simplified for now
+  console.log('Routes import not yet implemented');
   return count;
 }
 
 async function importFuel(data: any[][]) {
+  const headers = data[0].map((h: string) => h.toLowerCase().trim());
+  console.log('Fuel headers:', headers);
+  
+  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  
+  const deptIdx = getCol('department');
+  const dateIdx = getCol('date');
+  const regIdx = getCol('registration');
+  const cardNumIdx = getCol('card_num');
+  const cardNameIdx = getCol('card_name');
+  const pastIdx = getCol('past');
+  const currentIdx = getCol('current');
+  const qtyIdx = getCol('quantity');
+  const amtIdx = getCol('amount');
+  const placeIdx = getCol('place');
+
   let count = 0;
+  
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[2]) continue; // No vehicle reg
+    const regNum = regIdx >= 0 ? row[regIdx] : row[2];
+    
+    if (!regNum) continue;
 
     try {
       // Lookup vehicle
-      const vehicleRes = await query('SELECT id FROM vehicles WHERE registration_num = ?', [row[2]]);
-      if (vehicleRes.length === 0) continue;
+      const vehicleRes = await query('SELECT id FROM vehicles WHERE registration_num = $1', [String(regNum).trim()]);
+      if (vehicleRes.length === 0) {
+        console.log('Vehicle not found:', regNum);
+        continue;
+      }
       const vehicleId = vehicleRes[0].id;
 
-      const past = parseInt(row[5]) || 0;
-      const current = parseInt(row[6]) || 0;
-      const qty = parseFloat(row[8]) || 0;
-      const amt = parseFloat(row[10]) || 0;
-      const kmpl = qty > 0 ? ((current - past) / qty).toFixed(2) : 0;
-      const cpk = (current - past) > 0 ? (amt / (current - past)).toFixed(4) : 0;
+      const past = pastIdx >= 0 ? parseInt(row[pastIdx]) || 0 : 0;
+      const current = currentIdx >= 0 ? parseInt(row[currentIdx]) || 0 : 0;
+      const qty = qtyIdx >= 0 ? parseFloat(row[qtyIdx]) || 0 : 0;
+      const amt = amtIdx >= 0 ? parseFloat(row[amtIdx]) || 0 : 0;
+      const kmpl = qty > 0 ? parseFloat(((current - past) / qty).toFixed(2)) : 0;
+      const cpk = (current - past) > 0 ? parseFloat((amt / (current - past)).toFixed(4)) : 0;
 
       const id = uuidv4();
       await query(`
         INSERT INTO fuel_records 
         (id, department, fuel_date, vehicle_id, card_num, card_name, past_mileage, 
-         current_mileage, distance_km, quantity_liters, km_per_liter, amount, cost_per_km, place)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         current_mileage, quantity_liters, km_per_liter, amount, cost_per_km, place)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `, [
-        id, row[0], row[1], vehicleId, row[3], row[4], past, current, 
-        current - past, qty, kmpl, amt, cpk, row[13]
+        id, 
+        deptIdx >= 0 ? row[deptIdx] : 'Transport',
+        dateIdx >= 0 ? row[dateIdx] : new Date().toISOString().split('T')[0],
+        vehicleId, 
+        cardNumIdx >= 0 ? row[cardNumIdx] : '',
+        cardNameIdx >= 0 ? row[cardNameIdx] : 'Shell',
+        past, 
+        current,
+        qty, 
+        kmpl, 
+        amt, 
+        cpk, 
+        placeIdx >= 0 ? row[placeIdx] : 'Nairobi'
       ]);
       count++;
-    } catch (e) {
-      console.error('Fuel row error:', e);
+    } catch (e: any) {
+      console.error('Fuel row error:', e.message, row);
     }
   }
   return count;
 }
 
 async function importRepairs(data: any[][]) {
+  const headers = data[0].map((h: string) => h.toLowerCase().trim());
+  console.log('Repairs headers:', headers);
+  
+  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  
+  const dateIdx = getCol('date_in');
+  const regIdx = getCol('registration');
+  const maintIdx = getCol('maintenance');
+  const descIdx = getCol('description');
+  const odoIdx = getCol('odometer');
+  const techIdx = getCol('technician');
+  const garageIdx = getCol('garage');
+
   let count = 0;
+  
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (!row[1]) continue;
+    const regNum = regIdx >= 0 ? row[regIdx] : row[1];
+    
+    if (!regNum) continue;
 
     try {
-      const vehicleRes = await query('SELECT id FROM vehicles WHERE registration_num = ?', [row[1]]);
-      if (vehicleRes.length === 0) continue;
+      const vehicleRes = await query('SELECT id FROM vehicles WHERE registration_num = $1', [String(regNum).trim()]);
+      if (vehicleRes.length === 0) {
+        console.log('Vehicle not found for repair:', regNum);
+        continue;
+      }
       
       const id = uuidv4();
       await query(`
         INSERT INTO repairs 
         (id, date_in, vehicle_id, preventative_maintenance, breakdown_description,
          odometer_reading, assigned_technician, garage_name, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Pending')
       `, [
-        id, row[0], vehicleRes[0].id, row[2], row[3], parseInt(row[4]) || 0, row[6], row[13]
+        id, 
+        dateIdx >= 0 ? row[dateIdx] : new Date().toISOString().split('T')[0],
+        vehicleRes[0].id, 
+        maintIdx >= 0 ? row[maintIdx] : 'General Service',
+        descIdx >= 0 ? row[descIdx] : '',
+        odoIdx >= 0 ? parseInt(row[odoIdx]) || 0 : 0,
+        techIdx >= 0 ? row[techIdx] : 'Technician',
+        garageIdx >= 0 ? row[garageIdx] : 'City Garage'
       ]);
       count++;
-    } catch (e) {
-      console.error('Repair row error:', e);
+    } catch (e: any) {
+      console.error('Repair row error:', e.message, row);
     }
   }
   return count;
