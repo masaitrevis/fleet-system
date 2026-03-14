@@ -17,6 +17,8 @@ import dashboardRoutes from './routes/dashboard';
 import adminRoutes from './routes/admin';
 import analyticsRoutes from './routes/analytics';
 import requisitionRoutes from './routes/requisitions';
+import accidentRoutes from './routes/accidents';
+import auditRoutes from './routes/audits';
 
 dotenv.config();
 
@@ -60,6 +62,8 @@ app.use('/api/dashboard', authenticateToken, dashboardRoutes);
 app.use('/api/admin', authenticateToken, adminRoutes);
 app.use('/api/analytics', authenticateToken, analyticsRoutes);
 app.use('/api/requisitions', authenticateToken, requisitionRoutes);
+app.use('/api/accidents', authenticateToken, accidentRoutes);
+app.use('/api/audits', authenticateToken, auditRoutes);
 
 // Health check (public)
 app.get('/api/health', (req, res) => {

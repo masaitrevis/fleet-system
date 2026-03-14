@@ -10,9 +10,11 @@ import Repairs from './components/Repairs';
 import Upload from './components/Upload';
 import Reports from './components/Reports';
 import Analytics from './components/Analytics';
+import Accidents from './components/Accidents';
+import Audits from './components/Audits';
 import RequisitionModule from './components/requisition/RequisitionModule';
 
-export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'requisitions';
+export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'requisitions';
 
 // Force correct API URL - env vars not reliable in Netlify
 const API_URL = 'https://fleet-api-0272.onrender.com/api';
@@ -28,13 +30,15 @@ function AppContent() {
   const navItems: { key: View; label: string; icon: string; roles: string[] }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'viewer'] },
     { key: 'requisitions', label: 'Vehicle Requisition', icon: '🚗', roles: ['admin', 'manager', 'viewer'] },
+    { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer'] },
+    { key: 'audits', label: 'Fleet Audit', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer'] },
     { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer'] },
     { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager'] },
     { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer'] },
     { key: 'fuel', label: 'Fuel', icon: '⛽', roles: ['admin', 'manager', 'viewer'] },
     { key: 'repairs', label: 'Repairs', icon: '🔧', roles: ['admin', 'manager'] },
     { key: 'analytics', label: 'Analytics', icon: '📈', roles: ['admin', 'manager'] },
-    { key: 'reports', label: 'Reports', icon: '📋', roles: ['admin', 'manager'] },
+    { key: 'reports', label: 'Reports', icon: '📝', roles: ['admin', 'manager'] },
     { key: 'upload', label: 'Import', icon: '📤', roles: ['admin', 'manager'] },
   ];
 
@@ -44,6 +48,8 @@ function AppContent() {
     switch (currentView) {
       case 'dashboard': return <Dashboard apiUrl={API_URL} />;
       case 'requisitions': return <RequisitionModule apiUrl={API_URL} user={user} />;
+      case 'accidents': return <Accidents apiUrl={API_URL} user={user} />;
+      case 'audits': return <Audits apiUrl={API_URL} user={user} />;
       case 'fleet': return <Fleet apiUrl={API_URL} />;
       case 'staff': return <Staff apiUrl={API_URL} />;
       case 'routes': return <Routes apiUrl={API_URL} />;
