@@ -30,7 +30,6 @@ export default function Reports({ apiUrl }: ReportsProps) {
   const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
   const [reportType, setReportType] = useState('fleet');
   const [dateRange, setDateRange] = useState('30');
-  const [loading, setLoading] = useState(false);
 
   const token = localStorage.getItem('token');
 
