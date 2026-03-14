@@ -28,21 +28,25 @@ function AppContent() {
   }
 
   const navItems: { key: View; label: string; icon: string; roles: string[] }[] = [
-    { key: 'dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'viewer'] },
-    { key: 'requisitions', label: 'Vehicle Requisition', icon: '🚗', roles: ['admin', 'manager', 'viewer'] },
-    { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer'] },
-    { key: 'audits', label: 'Fleet Audit', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer'] },
-    { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer'] },
-    { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager'] },
-    { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer'] },
-    { key: 'fuel', label: 'Fuel', icon: '⛽', roles: ['admin', 'manager', 'viewer'] },
-    { key: 'repairs', label: 'Repairs', icon: '🔧', roles: ['admin', 'manager'] },
-    { key: 'analytics', label: 'Analytics', icon: '📈', roles: ['admin', 'manager'] },
-    { key: 'reports', label: 'Reports', icon: '📝', roles: ['admin', 'manager'] },
+    { key: 'dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
+    { key: 'requisitions', label: 'Vehicle Requisition', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod'] },
+    { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'hod', 'security'] },
+    { key: 'audits', label: 'Fleet Audit', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer', 'transport_supervisor', 'hod'] },
+    { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
+    { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager', 'hod'] },
+    { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
+    { key: 'fuel', label: 'Fuel', icon: '⛽', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
+    { key: 'repairs', label: 'Repairs', icon: '🔧', roles: ['admin', 'manager', 'transport_supervisor', 'hod'] },
+    { key: 'analytics', label: 'Analytics', icon: '📈', roles: ['admin', 'manager', 'hod'] },
+    { key: 'reports', label: 'Reports', icon: '📝', roles: ['admin', 'manager', 'hod', 'transport_supervisor'] },
     { key: 'upload', label: 'Import', icon: '📤', roles: ['admin', 'manager'] },
   ];
 
-  const filteredNav = navItems.filter(item => item.roles.includes(user?.role || 'viewer'));
+  const effectiveRole = user?.staffRole 
+    ? user.staffRole.toLowerCase().replace(/\s+/g, '_').replace('head_of_department', 'hod').replace('departmental', 'dept')
+    : user?.role || 'viewer';
+
+  const filteredNav = navItems.filter(item => item.roles.includes(effectiveRole));
 
   const renderView = () => {
     switch (currentView) {
@@ -91,11 +95,11 @@ function AppContent() {
         <div className="p-4 border-t">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
-              {user?.email?.[0]?.toUpperCase()}
+              {user?.staffName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-800 truncate">{user?.email}</p>
-              <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+              <p className="text-sm font-medium text-gray-800 truncate">{user?.staffName || user?.email}</p>
+              <p className="text-xs text-gray-500">{user?.staffRole || user?.role}</p>
             </div>
           </div>
           <button

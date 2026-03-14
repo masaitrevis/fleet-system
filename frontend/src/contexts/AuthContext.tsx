@@ -4,6 +4,11 @@ interface User {
   id: string;
   email: string;
   role: string;
+  staffRole?: string | null;
+  staffId?: string | null;
+  staffName?: string | null;
+  department?: string | null;
+  branch?: string | null;
 }
 
 interface AuthContextType {

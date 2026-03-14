@@ -49,8 +49,27 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
+    // Check if user is linked to staff record
+    const staffLink = await query(
+      'SELECT s.id as staff_id, s.role as staff_role, s.department, s.branch, s.staff_name FROM staff s WHERE s.email = ?',
+      [email]
+    );
+    
+    const staffInfo = staffLink.length > 0 ? staffLink[0] : null;
+    
+    // Use staff role if available, otherwise use user role
+    const effectiveRole = staffInfo?.staff_role || user.role;
+    
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
+      { 
+        userId: user.id, 
+        email: user.email, 
+        role: user.role,
+        staffRole: staffInfo?.staff_role || null,
+        staffId: staffInfo?.staff_id || null,
+        department: staffInfo?.department || null,
+        branch: staffInfo?.branch || null
+      },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -60,7 +79,12 @@ router.post('/login', async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        staffRole: staffInfo?.staff_role || null,
+        staffId: staffInfo?.staff_id || null,
+        staffName: staffInfo?.staff_name || null,
+        department: staffInfo?.department || null,
+        branch: staffInfo?.branch || null
       }
     });
   } catch (error) {
