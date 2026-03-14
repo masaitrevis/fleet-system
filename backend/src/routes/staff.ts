@@ -50,15 +50,32 @@ router.put('/:id', async (req, res) => {
   const updates = req.body;
   
   try {
-    const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
-    const values = Object.values(updates);
+    // Build dynamic query with proper PostgreSQL parameters
+    const allowedFields = ['staff_no', 'staff_name', 'email', 'phone', 'designation', 'department', 'branch', 'role', 'comments'];
+    const fields: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+    
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key)) {
+        fields.push(`${key} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
+    }
+    
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+    
+    values.push(id);
     
     await query(`
-      UPDATE staff SET ${fields}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [...values, id]);
+      UPDATE staff SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $${paramIndex}
+    `, values);
     
-    const result = await query('SELECT * FROM staff WHERE id = ?', [id]);
+    const result = await query('SELECT * FROM staff WHERE id = $1', [id]);
     res.json(result[0]);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update staff' });

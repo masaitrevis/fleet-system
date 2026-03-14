@@ -76,15 +76,32 @@ router.put('/:id', requireRole(['admin', 'manager']), async (req: AuthRequest, r
   const updates = req.body;
   
   try {
-    const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
-    const values = Object.values(updates);
+    // Build dynamic query with proper PostgreSQL parameters
+    const allowedFields = ['registration_num', 'year_of_manufacture', 'year_of_purchase', 'replacement_mileage', 'replacement_age', 'make_model', 'ownership', 'department', 'branch', 'minor_service_interval', 'medium_service_interval', 'major_service_interval', 'target_consumption_rate', 'status', 'current_mileage'];
+    const fields: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+    
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key)) {
+        fields.push(`${key} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
+    }
+    
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+    
+    values.push(id);
     
     await query(`
-      UPDATE vehicles SET ${fields}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [...values, id]);
+      UPDATE vehicles SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $${paramIndex}
+    `, values);
     
-    const result = await query('SELECT * FROM vehicles WHERE id = ?', [id]);
+    const result = await query('SELECT * FROM vehicles WHERE id = $1', [id]);
     if (result.length === 0) {
       return res.status(404).json({ error: 'Vehicle not found' });
     }
