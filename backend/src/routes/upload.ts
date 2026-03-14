@@ -526,7 +526,7 @@ async function importRequisitions(data: any[][]) {
       
       await query(`
         INSERT INTO requisitions 
-        (id, requisition_number, requested_by, department_id, purpose,
+        (id, request_no, requested_by, department_id, purpose,
          place_of_departure, destination, travel_date, travel_time,
          return_date, return_time, num_passengers, passenger_names, status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)

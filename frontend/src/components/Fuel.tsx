@@ -53,7 +53,17 @@ export default function Fuel({ apiUrl }: FuelProps) {
     })
       .then(r => r.json())
       .then(data => {
-        setRecords(data);
+        if (Array.isArray(data)) {
+          setRecords(data);
+        } else {
+          console.error('Fuel data not an array:', data);
+          setRecords([]);
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to fetch fuel records:', err);
+        setRecords([]);
         setLoading(false);
       });
   };
@@ -63,7 +73,18 @@ export default function Fuel({ apiUrl }: FuelProps) {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(r => r.json())
-      .then(data => setVehicles(data));
+      .then(data => {
+        if (Array.isArray(data)) {
+          setVehicles(data);
+        } else {
+          console.error('Vehicles data not an array:', data);
+          setVehicles([]);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to fetch vehicles:', err);
+        setVehicles([]);
+      });
   };
 
   const handleVehicleChange = (vehicleId: string) => {
