@@ -47,6 +47,11 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
   const isHOD = effectiveRole === 'hod';
   const canApprove = isManager || isHOD;
   const canAllocate = isManager || isTransport;
+  
+  // Debug: log user and role info
+  console.log('User:', user);
+  console.log('Effective Role:', effectiveRole);
+  console.log('Can Approve:', canApprove);
 
   // Load data when tab changes
   useEffect(() => {
@@ -216,7 +221,12 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Vehicle Requisition</h1>
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Vehicle Requisition</h1>
+        <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+          Role: {effectiveRole} {canApprove && '(Can Approve)'}
+        </span>
+      </div>
 
       <div className="bg-gray-100 p-1 rounded-xl inline-flex flex-wrap">
         <button 
