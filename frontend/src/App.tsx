@@ -25,6 +25,7 @@ const API_URL = 'https://fleet-api-0272.onrender.com/api';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isAuthenticated, logout, user } = useAuth();
 
   if (!isAuthenticated) {
@@ -33,10 +34,10 @@ function AppContent() {
 
   const navItems: { key: View; label: string; icon: string; roles: string[] }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
-    { key: 'security', label: 'Security Gate', icon: '🔒', roles: ['admin', 'manager', 'security', 'transport_supervisor', 'hod'] },
-    { key: 'requisitions', label: 'Vehicle Requisition', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod'] },
+    { key: 'security', label: 'Security', icon: '🔒', roles: ['admin', 'manager', 'security', 'transport_supervisor', 'hod'] },
+    { key: 'requisitions', label: 'Requisitions', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod'] },
     { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'hod', 'security'] },
-    { key: 'audits', label: 'Fleet Audit', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer', 'transport_supervisor', 'hod'] },
+    { key: 'audits', label: 'Audits', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer', 'transport_supervisor', 'hod'] },
     { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
     { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager', 'hod'] },
     { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
@@ -51,6 +52,11 @@ function AppContent() {
   const effectiveRole = getEffectiveRole(user);
 
   const filteredNav = navItems.filter(item => item.roles.includes(effectiveRole));
+
+  const handleNavClick = (key: View) => {
+    setCurrentView(key);
+    setMobileMenuOpen(false);
+  };
 
   const renderView = () => {
     switch (currentView) {
@@ -73,39 +79,62 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-md flex flex-col">
-        <div className="p-6 border-b">
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+      {/* Mobile Header */}
+      <div className="md:hidden bg-white shadow-sm p-4 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">🚛</span>
+          <h1 className="text-xl font-bold text-blue-600">FleetPro</h1>
+        </div>
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="p-2 rounded-lg hover:bg-gray-100"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {mobileMenuOpen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            )}
+          </svg>
+        </button>
+      </div>
+
+      {/* Sidebar - Desktop: always visible, Mobile: conditional */}
+      <aside className={`${mobileMenuOpen ? 'block' : 'hidden'} md:block md:w-64 bg-white shadow-md flex flex-col fixed md:static inset-0 z-40 md:z-auto pt-16 md:pt-0`}>
+        <div className="hidden md:block p-6 border-b">
           <h1 className="text-2xl font-bold text-blue-600">🚛 FleetPro</h1>
           <p className="text-sm text-gray-500 mt-1">Management System</p>
         </div>
-        <nav className="p-4 flex-1">
-          {filteredNav.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setCurrentView(item.key)}
-              className={`w-full text-left px-4 py-3 rounded-lg mb-2 flex items-center gap-3 transition-colors ${
-                currentView === item.key
-                  ? 'bg-blue-50 text-blue-600 font-medium'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <span>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
+        
+        <nav className="p-4 flex-1 overflow-y-auto">
+          <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
+            {filteredNav.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => handleNavClick(item.key)}
+                className={`text-left px-3 py-3 md:px-4 md:py-3 rounded-lg flex items-center gap-2 md:gap-3 transition-colors text-sm md:text-base ${
+                  currentView === item.key
+                    ? 'bg-blue-50 text-blue-600 font-medium'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <span className="text-lg md:text-xl">{item.icon}</span>
+                <span className="truncate">{item.label}</span>
+              </button>
+            ))}
+          </div>
         </nav>
         
         {/* User section */}
-        <div className="p-4 border-t">
+        <div className="p-4 border-t bg-white">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
+            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
               {user?.staffName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-800 truncate">{user?.staffName || user?.email}</p>
-              <p className="text-xs text-gray-500">{user?.staffRole || user?.role}</p>
+              <p className="text-xs text-gray-500 truncate">{user?.staffRole || user?.role}</p>
             </div>
           </div>
           <button
@@ -117,8 +146,16 @@ function AppContent() {
         </div>
       </aside>
 
+      {/* Mobile overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="flex-1 p-4 md:p-8 overflow-auto min-h-0">
         {renderView()}
       </main>
     </div>

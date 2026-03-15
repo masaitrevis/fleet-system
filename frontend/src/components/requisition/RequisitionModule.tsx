@@ -231,25 +231,25 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Vehicle Requisition</h1>
-        <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <h1 className="text-xl md:text-2xl font-bold">Vehicle Requisition</h1>
+        <span className="text-xs md:text-sm text-gray-500 bg-gray-100 px-2 md:px-3 py-1 rounded-full">
           Role: {effectiveRole} {canApprove && '(Can Approve)'}
         </span>
       </div>
 
-      <div className="bg-gray-100 p-1 rounded-xl inline-flex flex-wrap">
+      <div className="bg-gray-100 p-1 rounded-xl grid grid-cols-2 sm:flex sm:flex-wrap gap-1">
         <button 
           onClick={() => setActiveTab('request')} 
-          className={`px-4 py-2 rounded-lg ${activeTab === 'request' ? 'bg-white shadow' : ''}`}
+          className={`px-2 md:px-4 py-2 rounded-lg text-sm md:text-base ${activeTab === 'request' ? 'bg-white shadow' : ''}`}
         >
           New Request
         </button>
         
         <button 
           onClick={() => { setActiveTab('my-requests'); loadRequests(); }} 
-          className={`px-4 py-2 rounded-lg ${activeTab === 'my-requests' ? 'bg-white shadow' : ''}`}
+          className={`px-2 md:px-4 py-2 rounded-lg text-sm md:text-base ${activeTab === 'my-requests' ? 'bg-white shadow' : ''}`}
         >
           My Requests
         </button>
@@ -257,7 +257,7 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
         {isDriver && (
           <button 
             onClick={() => { setActiveTab('my-assignments'); loadAssignments(); }} 
-            className={`px-4 py-2 rounded-lg ${activeTab === 'my-assignments' ? 'bg-white shadow' : ''}`}
+            className={`px-2 md:px-4 py-2 rounded-lg text-sm md:text-base ${activeTab === 'my-assignments' ? 'bg-white shadow' : ''}`}
           >
             My Assignments
           </button>
@@ -266,7 +266,7 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
         {canApprove && (
           <button 
             onClick={() => { setActiveTab('approvals'); loadPendingApprovals(); }} 
-            className={`px-4 py-2 rounded-lg ${activeTab === 'approvals' ? 'bg-white shadow' : ''}`}
+            className={`px-2 md:px-4 py-2 rounded-lg text-sm md:text-base ${activeTab === 'approvals' ? 'bg-white shadow' : ''}`}
           >
             Approvals
           </button>
@@ -275,7 +275,7 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
         {canAllocate && (
           <button 
             onClick={() => { setActiveTab('allocations'); loadPendingAllocations(); }} 
-            className={`px-4 py-2 rounded-lg ${activeTab === 'allocations' ? 'bg-white shadow' : ''}`}
+            className={`px-2 md:px-4 py-2 rounded-lg text-sm md:text-base ${activeTab === 'allocations' ? 'bg-white shadow' : ''}`}
           >
             Allocations
           </button>
@@ -283,7 +283,7 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
         
         <button 
           onClick={() => { setActiveTab('completed'); loadCompletedTrips(); }} 
-          className={`px-4 py-2 rounded-lg ${activeTab === 'completed' ? 'bg-white shadow' : ''}`}
+          className={`px-2 md:px-4 py-2 rounded-lg text-sm md:text-base ${activeTab === 'completed' ? 'bg-white shadow' : ''}`}
         >
           Rate Driver
         </button>
