@@ -1,7 +1,5 @@
-ON CONFLICT (id) DO NOTHING;
-
 -- ============================================
--- ENHANCED TRAINING MODULE SCHEMA
+-- ENHANCED TRAINING MODULE WITH AI QUIZZES
 -- ============================================
 
 -- Training Course Content (Slides)
@@ -16,7 +14,7 @@ CREATE TABLE IF NOT EXISTS training_slides (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Quiz Questions
+-- Quiz Questions (AI-generated or manual)
 CREATE TABLE IF NOT EXISTS training_quiz_questions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     course_id UUID REFERENCES training_courses(id) ON DELETE CASCADE,
@@ -27,17 +25,18 @@ CREATE TABLE IF NOT EXISTS training_quiz_questions (
     option_d TEXT NOT NULL,
     correct_option CHAR(1) NOT NULL CHECK (correct_option IN ('A', 'B', 'C', 'D')),
     explanation TEXT,
+    difficulty VARCHAR(20) DEFAULT 'medium',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Staff Enrollments
+-- Staff Enrollments for Training
 CREATE TABLE IF NOT EXISTS training_enrollments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     staff_id UUID REFERENCES staff(id) ON DELETE CASCADE,
     course_id UUID REFERENCES training_courses(id) ON DELETE CASCADE,
     enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     enrolled_by UUID REFERENCES staff(id),
-    status VARCHAR(50) DEFAULT 'enrolled',
+    status VARCHAR(50) DEFAULT 'enrolled', -- enrolled, in_progress, quiz_pending, passed, failed, locked
     current_slide INTEGER DEFAULT 0,
     completed_slides INTEGER DEFAULT 0,
     total_slides INTEGER DEFAULT 0,
@@ -52,7 +51,7 @@ CREATE TABLE IF NOT EXISTS training_enrollments (
     UNIQUE(staff_id, course_id)
 );
 
--- Quiz Attempts
+-- Quiz Attempts History
 CREATE TABLE IF NOT EXISTS training_quiz_attempts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     enrollment_id UUID REFERENCES training_enrollments(id) ON DELETE CASCADE,
@@ -63,7 +62,7 @@ CREATE TABLE IF NOT EXISTS training_quiz_attempts (
     total_questions INTEGER,
     correct_answers INTEGER,
     passed BOOLEAN DEFAULT false,
-    answers JSONB DEFAULT '{}',
+    answers JSONB DEFAULT '{}', -- {question_id: "A", ...}
     UNIQUE(enrollment_id, attempt_number)
 );
 
@@ -89,12 +88,11 @@ CREATE INDEX IF NOT EXISTS idx_enrollments_status ON training_enrollments(status
 CREATE INDEX IF NOT EXISTS idx_certificates_staff ON training_certificates(staff_id);
 
 -- ============================================
--- PRE-BUILT AUDIT TEMPLATE QUESTIONS
+-- PRE-BUILT DVIR QUESTIONS
 -- ============================================
 
--- DVIR Questions
-INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence) 
-VALUES 
+-- Add questions to DVIR template
+INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence) VALUES
 ('dvir001', '550e8400-e29b-41d4-a716-446655440000', 'Brakes', 'Service brakes functioning properly', 1, true),
 ('dvir002', '550e8400-e29b-41d4-a716-446655440000', 'Brakes', 'Parking brake holds vehicle', 2, true),
 ('dvir003', '550e8400-e29b-41d4-a716-446655440000', 'Steering', 'Steering mechanism operates smoothly', 3, true),
@@ -110,9 +108,8 @@ VALUES
 ('dvir013', '550e8400-e29b-41d4-a716-446655440000', 'Documentation', 'Registration and insurance documents present', 13, true)
 ON CONFLICT (id) DO NOTHING;
 
--- DOT Questions
-INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence)
-VALUES 
+-- Add questions to DOT template
+INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence) VALUES
 ('dot001', '550e8400-e29b-41d4-a716-446655440001', 'Brake System', 'Brake lines, hoses, and connections inspected', 1, true),
 ('dot002', '550e8400-e29b-41d4-a716-446655440001', 'Brake System', 'Brake drums/rotors within wear limits', 2, true),
 ('dot003', '550e8400-e29b-41d4-a716-446655440001', 'Brake System', 'Brake pads/shoes adequate thickness', 3, true),

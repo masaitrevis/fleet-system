@@ -1,408 +1,517 @@
 import { useState, useEffect } from 'react';
-import { 
-  ResponsiveContainer, PieChart, Pie, Cell, Tooltip
-} from 'recharts';
 
 interface TrainingProps {
   apiUrl: string;
   user: any;
 }
 
-interface Course {
-  id: string;
-  course_code: string;
-  course_name: string;
-  description: string;
-  category: string;
-  duration_hours: number;
-  validity_months: number;
-  mandatory: boolean;
-  provider: string;
-}
-
-interface TrainingRecord {
-  id: string;
-  staff_name: string;
-  staff_no: string;
-  department: string;
-  course_name: string;
-  course_code: string;
-  category: string;
-  completion_date: string;
-  expiry_date: string;
-  status: string;
-  score: number;
-  certificate_number: string;
-  mandatory: boolean;
-}
-
-interface DashboardStats {
-  trained_staff: number;
-  active_certifications: number;
-  expiring_soon: number;
-  expired: number;
-  missing_mandatory: number;
-  by_category: any[];
-}
-
-const CATEGORY_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 const STATUS_COLORS: Record<string, string> = {
-  'Active': 'bg-green-100 text-green-800',
-  'Expiring Soon': 'bg-yellow-100 text-yellow-800',
-  'Expired': 'bg-red-100 text-red-800'
+  'enrolled': 'bg-blue-100 text-blue-800',
+  'in_progress': 'bg-yellow-100 text-yellow-800',
+  'quiz_pending': 'bg-orange-100 text-orange-800',
+  'passed': 'bg-green-100 text-green-800',
+  'failed': 'bg-red-100 text-red-800',
+  'locked': 'bg-gray-100 text-gray-800'
 };
 
-export default function Training({ apiUrl }: TrainingProps) {
-  const [view, setView] = useState<'dashboard' | 'courses' | 'records' | 'add-record'>('dashboard');
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [records, setRecords] = useState<TrainingRecord[]>([]);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [staff, setStaff] = useState<any[]>([]);
+export default function Training({ apiUrl, user }: TrainingProps) {
+  const [view, setView] = useState<'dashboard' | 'courses' | 'my-training' | 'certificates' | 'locked' | 'slides' | 'quiz'>('dashboard');
+  const [courses, setCourses] = useState<any[]>([]);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [certificates, setCertificates] = useState<any[]>([]);
+  const [lockedEnrollments, setLockedEnrollments] = useState<any[]>([]);
+  const [selectedEnrollment, setSelectedEnrollment] = useState<any>(null);
+  const [slides, setSlides] = useState<any[]>([]);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+  const [quizResult, setQuizResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  
   const token = localStorage.getItem('token');
+  const isManager = ['admin', 'manager', 'transport_supervisor'].includes(user?.role);
 
-  // Form states
-  const [newCourse, setNewCourse] = useState({
-    course_code: '', course_name: '', description: '', category: '',
-    duration_hours: '', validity_months: '', mandatory: false, provider: ''
-  });
-  const [newRecord, setNewRecord] = useState({
-    staff_id: '', course_id: '', completion_date: '', score: '', certificate_number: '', notes: ''
-  });
+  useEffect(() => { fetchData(); }, []);
 
-  useEffect(() => {
-    fetchDashboard();
+  const fetchData = async () => {
     fetchCourses();
-    fetchRecords();
-    fetchStaff();
-  }, []);
-
-  const fetchDashboard = async () => {
-    try {
-      const res = await fetch(`${apiUrl}/training/dashboard`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setStats(await res.json());
-    } catch (err) {
-      console.error('Failed to fetch dashboard');
-    }
+    fetchEnrollments();
+    fetchCertificates();
+    if (isManager) fetchLockedEnrollments();
   };
 
   const fetchCourses = async () => {
-    try {
-      const res = await fetch(`${apiUrl}/training/courses`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setCourses(await res.json());
-    } catch (err) {
-      console.error('Failed to fetch courses');
-    }
+    const res = await fetch(`${apiUrl}/training/courses`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.ok) setCourses(await res.json());
   };
 
-  const fetchRecords = async () => {
-    try {
-      const res = await fetch(`${apiUrl}/training/records`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setRecords(await res.json());
-    } catch (err) {
-      console.error('Failed to fetch records');
-    }
+  const fetchEnrollments = async () => {
+    const res = await fetch(`${apiUrl}/training/my-enrollments`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.ok) setEnrollments(await res.json());
   };
 
-  const fetchStaff = async () => {
-    try {
-      const res = await fetch(`${apiUrl}/staff`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setStaff(await res.json());
-    } catch (err) {
-      console.error('Failed to fetch staff');
-    }
+  const fetchCertificates = async () => {
+    const res = await fetch(`${apiUrl}/training/my-certificates`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.ok) setCertificates(await res.json());
   };
 
-  const handleCreateCourse = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const fetchLockedEnrollments = async () => {
+    const res = await fetch(`${apiUrl}/training/locked`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.ok) setLockedEnrollments(await res.json());
+  };
+
+  // Enroll in course
+  const handleEnroll = async (courseId: string) => {
     setLoading(true);
-    try {
-      const res = await fetch(`${apiUrl}/training/courses`, {
+    const res = await fetch(`${apiUrl}/training/enroll`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ staff_id: user.staffId, course_id: courseId })
+    });
+    if (res.ok) {
+      alert('Enrolled successfully!');
+      fetchEnrollments();
+    }
+    setLoading(false);
+  };
+
+  // Start training (view slides)
+  const startTraining = async (enrollment: any) => {
+    setSelectedEnrollment(enrollment);
+    const res = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/full`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setSlides(data.slides || []);
+      setCurrentSlide(enrollment.current_slide || 0);
+      setView('slides');
+    }
+  };
+
+  // Update slide progress
+  const updateProgress = async (slideNum: number) => {
+    await fetch(`${apiUrl}/training/enrollments/${selectedEnrollment.id}/progress`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slide_number: slideNum })
+    });
+  };
+
+  // Generate/Start Quiz
+  const startQuiz = async (enrollment: any) => {
+    setSelectedEnrollment(enrollment);
+    setQuizResult(null);
+    setQuizAnswers({});
+    
+    // First ensure we have quiz questions
+    let questionsRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/quiz`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    let questions = await questionsRes.json();
+    
+    // If no questions, generate them
+    if (questions.length === 0) {
+      setLoading(true);
+      await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/generate-quiz`, {
         method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ...newCourse,
-          duration_hours: parseInt(newCourse.duration_hours) || null,
-          validity_months: parseInt(newCourse.validity_months) || null
-        })
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ num_questions: 10 })
       });
-      if (res.ok) {
-        setNewCourse({ course_code: '', course_name: '', description: '', category: '', duration_hours: '', validity_months: '', mandatory: false, provider: '' });
-        fetchCourses();
-        alert('Course created!');
-      }
-    } catch (err) {
-      alert('Failed to create course');
-    } finally {
+      
+      // Fetch again
+      questionsRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/quiz${enrollment.quiz_attempts > 0 ? '?exclude_used=true&enrollment_id=' + enrollment.id : ''}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      questions = await questionsRes.json();
       setLoading(false);
     }
+    
+    setQuizQuestions(questions);
+    setView('quiz');
   };
 
-  const handleAddRecord = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Submit Quiz
+  const submitQuiz = async () => {
+    if (Object.keys(quizAnswers).length < quizQuestions.length) {
+      alert('Please answer all questions');
+      return;
+    }
+    
     setLoading(true);
-    try {
-      const res = await fetch(`${apiUrl}/training/records`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ...newRecord,
-          score: parseFloat(newRecord.score) || null
-        })
-      });
-      if (res.ok) {
-        setNewRecord({ staff_id: '', course_id: '', completion_date: '', score: '', certificate_number: '', notes: '' });
-        fetchRecords();
-        fetchDashboard();
-        alert('Training record added!');
-      }
-    } catch (err) {
-      alert('Failed to add record');
-    } finally {
-      setLoading(false);
+    const res = await fetch(`${apiUrl}/training/enrollments/${selectedEnrollment.id}/quiz-submit`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: quizAnswers })
+    });
+    
+    if (res.ok) {
+      const result = await res.json();
+      setQuizResult(result);
+      fetchEnrollments();
+      if (result.passed) fetchCertificates();
+    } else {
+      const err = await res.json();
+      alert(err.error);
+    }
+    setLoading(false);
+  };
+
+  // Unlock training (manager)
+  const unlockTraining = async (enrollmentId: string) => {
+    const res = await fetch(`${apiUrl}/training/enrollments/${enrollmentId}/unlock`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      alert('Training unlocked!');
+      fetchLockedEnrollments();
     }
   };
 
-  const deleteRecord = async (id: string) => {
-    if (!confirm('Delete this record?')) return;
-    try {
-      const res = await fetch(`${apiUrl}/training/records/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        fetchRecords();
-        fetchDashboard();
-      }
-    } catch (err) {
-      alert('Failed to delete');
+  // Certificate PDF view
+  const viewCertificate = (cert: any) => {
+    const certWindow = window.open('', '_blank');
+    if (certWindow) {
+      certWindow.document.write(`
+        <html>
+        <head>
+          <title>Certificate - ${cert.course_name}</title>
+          <style>
+            body { font-family: Georgia, serif; text-align: center; padding: 50px; background: #f5f5f5; }
+            .certificate { border: 15px solid #1e3a5f; padding: 60px; background: white; max-width: 800px; margin: 0 auto; }
+            h1 { color: #1e3a5f; font-size: 42px; margin-bottom: 20px; }
+            h2 { color: #c9a227; font-size: 32px; margin: 30px 0; }
+            .recipient { font-size: 36px; color: #1e3a5f; margin: 30px 0; font-weight: bold; }
+            .details { margin: 30px 0; font-size: 18px; color: #555; }
+            .seal { width: 120px; height: 120px; border: 5px solid #c9a227; border-radius: 50%; margin: 30px auto; 
+                    display: flex; align-items: center; justify-content: center; color: #c9a227; font-size: 14px; }
+            .cert-number { position: absolute; top: 20px; right: 20px; font-size: 12px; color: #666; }
+            @media print { body { background: white; } .certificate { border: none; } button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="certificate">
+            <div style="text-align: right; font-size: 12px; color: #666;">Cert #: ${cert.certificate_number}</div>
+            <h1>CERTIFICATE<br/>OF COMPLETION</h1>
+            <p style="font-size: 18px;">This certifies that</p>
+            <div class="recipient">${cert.staff_name || user?.staff_name}</div>
+            <p style="font-size: 18px;">has successfully completed</p>
+            <h2>${cert.course_name}</h2>
+            <div class="details">
+              <p><strong>Score:</strong> ${cert.score}% | <strong>Duration:</strong> ${cert.duration_hours || 'N/A'} hours</p>
+              <p><strong>Issue Date:</strong> ${new Date(cert.issue_date).toLocaleDateString()}</p>
+              ${cert.expiry_date ? `<p><strong>Valid Until:</strong> ${new Date(cert.expiry_date).toLocaleDateString()}</p>` : ''}
+            </div>
+            <div class="seal">FLEET<br/>PRO</div>
+            <p style="margin-top: 40px; font-size: 14px; color: #888;">Fleet Management Training System</p>
+          </div>
+          <button onclick="window.print()" style="margin-top: 20px; padding: 10px 30px; font-size: 16px; cursor: pointer;">Print Certificate</button>
+        </body>
+        </html>
+      `);
     }
   };
 
+  // RENDER VIEWS
+  
+  // Slides View
+  if (view === 'slides' && selectedEnrollment) {
+    const slide = slides[currentSlide];
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">{selectedEnrollment.course_name}</h2>
+          <button onClick={() => setView('my-training')} className="text-gray-600 hover:text-gray-800">← Back</button>
+        </div>
+        
+        <div className="bg-white rounded-lg shadow-lg p-8 min-h-[400px]">
+          <div className="flex justify-between text-sm text-gray-500 mb-4">
+            <span>Slide {currentSlide + 1} of {slides.length}</span>
+            <span>{Math.round(((currentSlide + 1) / slides.length) * 100)}% Complete</span>
+          </div>
+          
+          <div className="h-2 bg-gray-200 rounded mb-6">
+            <div className="h-2 bg-blue-600 rounded transition-all" style={{ width: `${((currentSlide + 1) / slides.length) * 100}%` }}></div>
+          </div>
+          
+          {slide && (
+            <div className="space-y-4">
+              <h3 className="text-2xl font-semibold text-blue-900">{slide.title}</h3>
+              <div className="prose max-w-none whitespace-pre-wrap">{slide.content}</div>
+              {slide.media_url && (
+                <img src={slide.media_url} alt={slide.title} className="max-h-64 rounded" />
+              )}
+            </div>
+          )}
+        </div>
+        
+        <div className="flex justify-between mt-6">
+          <button 
+            onClick={() => { setCurrentSlide(c => c - 1); updateProgress(currentSlide - 1); }}
+            disabled={currentSlide === 0}
+            className="px-6 py-2 bg-gray-200 rounded disabled:opacity-50"
+          >
+            Previous
+          </button>
+          
+          {currentSlide < slides.length - 1 ? (
+            <button 
+              onClick={() => { setCurrentSlide(c => c + 1); updateProgress(currentSlide + 1); }}
+              className="px-6 py-2 bg-blue-600 text-white rounded"
+            >
+              Next →
+            </button>
+          ) : (
+            <button 
+              onClick={() => { updateProgress(slides.length); setView('my-training'); startQuiz(selectedEnrollment); }}
+              className="px-6 py-2 bg-green-600 text-white rounded"
+            >
+              Take Quiz →
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Quiz View
+  if (view === 'quiz' && selectedEnrollment) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">Quiz: {selectedEnrollment.course_name}</h2>
+          <button onClick={() => setView('my-training')} className="text-gray-600 hover:text-gray-800">← Exit</button>
+        </div>
+        
+        {quizResult ? (
+          <div className={`p-8 rounded-lg text-center ${quizResult.passed ? 'bg-green-50' : quizResult.attempts_remaining === 0 ? 'bg-red-50' : 'bg-yellow-50'}`}>
+            <div className="text-6xl mb-4">{quizResult.passed ? '🎉' : quizResult.attempts_remaining === 0 ? '🔒' : '⚠️'}</div>
+            <h3 className="text-2xl font-bold mb-2">
+              {quizResult.passed ? 'Congratulations!' : quizResult.attempts_remaining === 0 ? 'Training Locked' : 'Try Again'}
+            </h3>
+            <p className="text-xl mb-4">Score: <strong>{quizResult.score}%</strong> ({quizResult.correct_answers}/{quizResult.total_questions} correct)</p>
+            <p className="mb-4">Passing score: {70}%</p>
+            
+            {quizResult.passed ? (
+              <div>
+                <p className="text-green-700 mb-4">You passed! Your certificate has been generated.</p>
+                <button onClick={() => { setView('certificates'); fetchCertificates(); }} className="px-6 py-2 bg-blue-600 text-white rounded">
+                  View Certificate →
+                </button>
+              </div>
+            ) : quizResult.attempts_remaining === 0 ? (
+              <div>
+                <p className="text-red-700 mb-4">Maximum attempts reached. Contact your Transport Manager to unlock this training.</p>
+                <button onClick={() => setView('my-training')} className="px-6 py-2 bg-gray-600 text-white rounded">
+                  Back to My Training
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p className="text-yellow-700 mb-4">You have {quizResult.attempts_remaining} attempt(s) remaining.</p>
+                <button onClick={() => startQuiz(selectedEnrollment)} className="px-6 py-2 bg-yellow-600 text-white rounded mr-2">
+                  Try Again
+                </button>
+                <button onClick={() => setView('my-training')} className="px-6 py-2 bg-gray-600 text-white rounded">
+                  Study More
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="bg-blue-50 p-4 rounded text-sm">
+              Attempt {selectedEnrollment.quiz_attempts + 1} of 3 • Answer all 10 questions • Need 70% to pass
+            </div>
+            
+            {quizQuestions.map((q, idx) => (
+              <div key={q.id} className="bg-white p-4 rounded-lg shadow">
+                <p className="font-medium mb-3">{idx + 1}. {q.question_text}</p>
+                <div className="space-y-2">
+                  {['A', 'B', 'C', 'D'].map((opt) => (
+                    <label key={opt} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        name={q.id} 
+                        value={opt}
+                        checked={quizAnswers[q.id] === opt}
+                        onChange={() => setQuizAnswers({ ...quizAnswers, [q.id]: opt })}
+                        className="text-blue-600"
+                      />
+                      <span>{q[`option_${opt.toLowerCase()}`]}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+            
+            <button 
+              onClick={submitQuiz}
+              disabled={loading || Object.keys(quizAnswers).length < quizQuestions.length}
+              className="w-full py-3 bg-blue-600 text-white rounded-lg disabled:bg-gray-400"
+            >
+              {loading ? 'Submitting...' : 'Submit Quiz'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Main View
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Training & Certifications</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={() => setView('dashboard')} className={`px-4 py-2 rounded ${view === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Dashboard</button>
-          <button onClick={() => setView('courses')} className={`px-4 py-2 rounded ${view === 'courses' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Courses</button>
-          <button onClick={() => setView('records')} className={`px-4 py-2 rounded ${view === 'records' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Records</button>
-          <button onClick={() => setView('add-record')} className={`px-4 py-2 rounded ${view === 'add-record' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Add Record</button>
+          <button onClick={() => setView('courses')} className={`px-4 py-2 rounded ${view === 'courses' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>All Courses</button>
+          <button onClick={() => setView('my-training')} className={`px-4 py-2 rounded ${view === 'my-training' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>My Training</button>
+          <button onClick={() => setView('certificates')} className={`px-4 py-2 rounded ${view === 'certificates' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Certificates</button>
+          {isManager && (
+            <button onClick={() => setView('locked')} className={`px-4 py-2 rounded ${view === 'locked' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800'}`}>
+              Locked ({lockedEnrollments.length})
+            </button>
+          )}
         </div>
       </div>
 
       {/* Dashboard View */}
-      {view === 'dashboard' && stats && (
-        <div className="space-y-6">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Trained Staff</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.trained_staff}</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Active Certs</p>
-              <p className="text-2xl font-bold text-green-600">{stats.active_certifications}</p>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Expiring Soon</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.expiring_soon}</p>
-            </div>
-            <div className="bg-red-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Expired</p>
-              <p className="text-2xl font-bold text-red-600">{stats.expired}</p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Missing Mandatory</p>
-              <p className="text-2xl font-bold text-purple-600">{stats.missing_mandatory}</p>
-            </div>
+      {view === 'dashboard' && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">Enrolled Courses</p>
+            <p className="text-2xl font-bold text-blue-600">{enrollments.length}</p>
           </div>
-
-          {/* Charts */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white p-4 rounded-lg shadow">
-              <h3 className="font-semibold mb-4">Training by Category</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie data={stats.by_category} dataKey="count" nameKey="category" cx="50%" cy="50%" outerRadius={80}>
-                    {stats.by_category.map((_, i) => (
-                      <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="bg-white p-4 rounded-lg shadow">
-              <h3 className="font-semibold mb-4">Expiring This Month</h3>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {records.filter(r => r.status === 'Expiring Soon').slice(0, 5).map(r => (
-                  <div key={r.id} className="flex justify-between items-center p-2 bg-yellow-50 rounded">
-                    <div>
-                      <p className="font-medium text-sm">{r.staff_name}</p>
-                      <p className="text-xs text-gray-600">{r.course_name}</p>
-                    </div>
-                    <span className="text-xs text-red-600">{r.expiry_date}</span>
-                  </div>
-                ))}
-                {records.filter(r => r.status === 'Expiring Soon').length === 0 && (
-                  <p className="text-gray-500 text-sm">No certifications expiring soon</p>
-                )}
-              </div>
-            </div>
+          <div className="bg-green-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">Completed</p>
+            <p className="text-2xl font-bold text-green-600">{enrollments.filter(e => e.status === 'passed').length}</p>
+          </div>
+          <div className="bg-yellow-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">In Progress</p>
+            <p className="text-2xl font-bold text-yellow-600">{enrollments.filter(e => ['in_progress', 'quiz_pending'].includes(e.status)).length}</p>
+          </div>
+          <div className="bg-purple-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">Certificates</p>
+            <p className="text-2xl font-bold text-purple-600">{certificates.length}</p>
           </div>
         </div>
       )}
 
       {/* Courses View */}
       {view === 'courses' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Course List */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="p-4 border-b">
-                <h3 className="font-semibold">Training Courses</h3>
-              </div>
-              <div className="divide-y max-h-96 overflow-y-auto">
-                {courses.map(c => (
-                  <div key={c.id} className="p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">{c.course_name}</p>
-                        <p className="text-sm text-gray-500">{c.course_code} • {c.category}</p>
-                        <p className="text-xs text-gray-400">{c.duration_hours}h • Valid for {c.validity_months} months</p>
-                      </div>
-                      {c.mandatory && <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded">Mandatory</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Create Course Form */}
-            <div className="bg-white p-4 rounded-lg shadow">
-              <h3 className="font-semibold mb-4">Add New Course</h3>
-              <form onSubmit={handleCreateCourse} className="space-y-3">
-                <input type="text" placeholder="Course Code" className="w-full border rounded px-3 py-2"
-                  value={newCourse.course_code} onChange={e => setNewCourse({...newCourse, course_code: e.target.value})} required />
-                <input type="text" placeholder="Course Name" className="w-full border rounded px-3 py-2"
-                  value={newCourse.course_name} onChange={e => setNewCourse({...newCourse, course_name: e.target.value})} required />
-                <input type="text" placeholder="Category" className="w-full border rounded px-3 py-2"
-                  value={newCourse.category} onChange={e => setNewCourse({...newCourse, category: e.target.value})} />
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="number" placeholder="Duration (hrs)" className="w-full border rounded px-3 py-2"
-                    value={newCourse.duration_hours} onChange={e => setNewCourse({...newCourse, duration_hours: e.target.value})} />
-                  <input type="number" placeholder="Validity (months)" className="w-full border rounded px-3 py-2"
-                    value={newCourse.validity_months} onChange={e => setNewCourse({...newCourse, validity_months: e.target.value})} />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {courses.map(course => {
+            const enrolled = enrollments.find(e => e.course_id === course.id);
+            return (
+              <div key={course.id} className="bg-white p-4 rounded-lg shadow">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-semibold">{course.course_name}</h3>
+                  {course.mandatory && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">Required</span>}
                 </div>
-                <input type="text" placeholder="Provider" className="w-full border rounded px-3 py-2"
-                  value={newCourse.provider} onChange={e => setNewCourse({...newCourse, provider: e.target.value})} />
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={newCourse.mandatory} 
-                    onChange={e => setNewCourse({...newCourse, mandatory: e.target.checked})} />
-                  <span className="text-sm">Mandatory Course</span>
-                </label>
-                <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded disabled:bg-gray-400">
-                  {loading ? 'Creating...' : 'Create Course'}
-                </button>
-              </form>
-            </div>
-          </div>
+                <p className="text-sm text-gray-500 mb-2">{course.category} • {course.duration_hours}h</p>
+                <p className="text-xs text-gray-400 mb-4">{course.description?.substring(0, 100)}...</p>
+                
+                {enrolled ? (
+                  <button disabled className="w-full py-2 bg-green-100 text-green-700 rounded">{enrolled.status === 'passed' ? '✓ Completed' : 'Enrolled'}</button>
+                ) : (
+                  <button onClick={() => handleEnroll(course.id)} disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded disabled:bg-gray-400">
+                    {loading ? 'Enrolling...' : 'Enroll Now'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Records View */}
-      {view === 'records' && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="p-4 border-b">
-            <h3 className="font-semibold">Training Records</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left">Staff</th>
-                  <th className="px-4 py-2 text-left">Course</th>
-                  <th className="px-4 py-2 text-left">Completed</th>
-                  <th className="px-4 py-2 text-left">Expires</th>
-                  <th className="px-4 py-2 text-left">Status</th>
-                  <th className="px-4 py-2 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {records.map(r => (
-                  <tr key={r.id}>
-                    <td className="px-4 py-2">{r.staff_name} <span className="text-gray-400">({r.staff_no})</span></td>
-                    <td className="px-4 py-2">{r.course_name} {r.mandatory && <span className="text-red-500 text-xs">*</span>}</td>
-                    <td className="px-4 py-2">{r.completion_date}</td>
-                    <td className="px-4 py-2">{r.expiry_date || 'Never'}</td>
-                    <td className="px-4 py-2"><span className={`px-2 py-1 rounded text-xs ${STATUS_COLORS[r.status] || 'bg-gray-100'}`}>{r.status}</span></td>
-                    <td className="px-4 py-2">
-                      <button onClick={() => deleteRecord(r.id)} className="text-red-600 text-xs hover:underline">Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {/* My Training View */}
+      {view === 'my-training' && (
+        <div className="space-y-4">
+          {enrollments.map(e => (
+            <div key={e.id} className="bg-white p-4 rounded-lg shadow flex justify-between items-center">
+              <div>
+                <h3 className="font-semibold">{e.course_name}</h3>
+                <p className="text-sm text-gray-500">{e.category} • Enrolled {new Date(e.enrolled_at).toLocaleDateString()}</p>
+                <div className="flex gap-2 mt-2">
+                  <span className={`px-2 py-1 rounded text-xs ${STATUS_COLORS[e.status] || 'bg-gray-100'}`}>
+                    {e.status.replace('_', ' ')}
+                  </span>
+                  {e.quiz_attempts > 0 && (
+                    <span className="px-2 py-1 rounded text-xs bg-gray-100">
+                      Attempt {e.quiz_attempts}/3
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                {e.status === 'enrolled' && (
+                  <button onClick={() => startTraining(e)} className="px-4 py-2 bg-blue-600 text-white rounded">Start Learning</button>
+                )}
+                {e.status === 'in_progress' && (
+                  <button onClick={() => startTraining(e)} className="px-4 py-2 bg-yellow-600 text-white rounded">Continue</button>
+                )}
+                {e.status === 'quiz_pending' && (
+                  <button onClick={() => startQuiz(e)} className="px-4 py-2 bg-orange-600 text-white rounded">Take Quiz</button>
+                )}
+                {e.status === 'locked' && (
+                  <span className="px-4 py-2 bg-gray-300 text-gray-600 rounded">🔒 Locked</span>
+                )}
+              </div>
+            </div>
+          ))}
+          {enrollments.length === 0 && <p className="text-center text-gray-500 py-8">No enrollments. Browse courses to get started!</p>}
         </div>
       )}
 
-      {/* Add Record View */}
-      {view === 'add-record' && (
-        <div className="max-w-xl mx-auto bg-white p-6 rounded-lg shadow">
-          <h3 className="font-semibold mb-4">Add Training Record</h3>
-          <form onSubmit={handleAddRecord} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Staff Member</label>
-              <select className="w-full border rounded px-3 py-2" 
-                value={newRecord.staff_id} onChange={e => setNewRecord({...newRecord, staff_id: e.target.value})} required>
-                <option value="">Select Staff</option>
-                {staff.map(s => <option key={s.id} value={s.id}>{s.staff_name} ({s.staff_no})</option>)}
-              </select>
+      {/* Certificates View */}
+      {view === 'certificates' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {certificates.map(cert => (
+            <div key={cert.id} className="bg-gradient-to-br from-blue-50 to-purple-50 p-6 rounded-lg border-2 border-blue-200">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-bold text-lg">{cert.course_name}</h3>
+                  <p className="text-sm text-gray-600">{cert.course_code}</p>
+                </div>
+                <span className="text-4xl">🏆</span>
+              </div>
+              <div className="mt-4 space-y-1 text-sm">
+                <p><strong>Score:</strong> {cert.score}%</p>
+                <p><strong>Issued:</strong> {new Date(cert.issue_date).toLocaleDateString()}</p>
+                {cert.expiry_date && (
+                  <p><strong>Expires:</strong> {new Date(cert.expiry_date).toLocaleDateString()}</p>
+                )}
+                <p className="text-xs text-gray-500">{cert.certificate_number}</p>
+              </div>
+              <button onClick={() => viewCertificate(cert)} className="mt-4 w-full py-2 bg-blue-600 text-white rounded">
+                View Certificate
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Course</label>
-              <select className="w-full border rounded px-3 py-2"
-                value={newRecord.course_id} onChange={e => setNewRecord({...newRecord, course_id: e.target.value})} required>
-                <option value="">Select Course</option>
-                {courses.map(c => <option key={c.id} value={c.id}>{c.course_name}</option>)}
-              </select>
+          ))}
+          {certificates.length === 0 && <p className="text-center text-gray-500 py-8">No certificates yet. Complete training to earn certificates!</p>}
+        </div>
+      )}
+
+      {/* Locked Enrollments (Manager) */}
+      {view === 'locked' && isManager && (
+        <div className="space-y-4">
+          {lockedEnrollments.map(e => (
+            <div key={e.id} className="bg-red-50 p-4 rounded-lg border border-red-200 flex justify-between items-center">
+              <div>
+                <h3 className="font-semibold">{e.staff_name} ({e.staff_no})</h3>
+                <p className="text-sm text-gray-600">{e.course_name} • {e.department}</p>
+                <p className="text-xs text-red-600 mt-1">Locked: {e.locked_reason}</p>
+              </div>
+              <button onClick={() => unlockTraining(e.id)} className="px-4 py-2 bg-green-600 text-white rounded">
+                Unlock Training
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Completion Date</label>
-              <input type="date" className="w-full border rounded px-3 py-2"
-                value={newRecord.completion_date} onChange={e => setNewRecord({...newRecord, completion_date: e.target.value})} required />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Score (%)</label>
-              <input type="number" min="0" max="100" className="w-full border rounded px-3 py-2"
-                value={newRecord.score} onChange={e => setNewRecord({...newRecord, score: e.target.value})} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Certificate Number</label>
-              <input type="text" className="w-full border rounded px-3 py-2"
-                value={newRecord.certificate_number} onChange={e => setNewRecord({...newRecord, certificate_number: e.target.value})} />
-            </div>
-            <button type="submit" disabled={loading} className="w-full bg-green-600 text-white py-2 rounded disabled:bg-gray-400">
-              {loading ? 'Adding...' : 'Add Training Record'}
-            </button>
-          </form>
+          ))}
+          {lockedEnrollments.length === 0 && <p className="text-center text-gray-500 py-8">No locked enrollments.</p>}
         </div>
       )}
     </div>
