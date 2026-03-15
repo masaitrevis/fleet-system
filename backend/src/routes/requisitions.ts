@@ -77,7 +77,8 @@ router.post('/', async (req, res) => {
 
 // Get my requisitions
 router.get('/my-requests', async (req: any, res) => {
-  const userId = req.user?.userId;
+  // Use staffId if available (for job roles), otherwise fall back to userId
+  const staffId = req.user?.staffId || req.user?.userId;
   
   try {
     const result = await query(`
@@ -91,7 +92,7 @@ router.get('/my-requests', async (req: any, res) => {
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       WHERE r.requested_by = ?
       ORDER BY r.created_at DESC
-    `, [userId]);
+    `, [staffId]);
     
     res.json(result);
   } catch (error) {

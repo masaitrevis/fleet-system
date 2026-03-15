@@ -17,8 +17,9 @@ interface StaffMember {
 
 export default function RequestForm({ apiUrl, user, onSuccess }: RequestFormProps) {
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const hasStaffId = !!user?.staffId;
   const [formData, setFormData] = useState({
-    requested_by: user?.id || '',
+    requested_by: user?.staffId || '',
     place_of_departure: '',
     destination: '',
     purpose: '',
@@ -35,7 +36,11 @@ export default function RequestForm({ apiUrl, user, onSuccess }: RequestFormProp
 
   useEffect(() => {
     fetchStaff();
-  }, []);
+    // If user has staffId, pre-select it
+    if (user?.staffId) {
+      setFormData(prev => ({ ...prev, requested_by: user.staffId }));
+    }
+  }, [user]);
 
   const fetchStaff = async () => {
     try {
@@ -56,17 +61,19 @@ export default function RequestForm({ apiUrl, user, onSuccess }: RequestFormProp
     setError('');
     setSubmitting(true);
 
-    // Validation
-    const selectedStaff = staff.find((s: any) => s.id === formData.requested_by);
-    if (!selectedStaff) {
-      setError('Please select a staff member');
-      setSubmitting(false);
-      return;
-    }
-    if (!selectedStaff.email) {
-      setError(`⚠️ ${selectedStaff.staff_name} has no email. Please add email in Staff tab first.`);
-      setSubmitting(false);
-      return;
+    // Validation - only check staff selection if user doesn't have staffId
+    if (!hasStaffId) {
+      const selectedStaff = staff.find((s: any) => s.id === formData.requested_by);
+      if (!selectedStaff) {
+        setError('Please select a staff member');
+        setSubmitting(false);
+        return;
+      }
+      if (!selectedStaff.email) {
+        setError(`⚠️ ${selectedStaff.staff_name} has no email. Please add email in Staff tab first.`);
+        setSubmitting(false);
+        return;
+      }
     }
 
     try {
@@ -103,22 +110,36 @@ export default function RequestForm({ apiUrl, user, onSuccess }: RequestFormProp
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Requester *</label>
-            <select 
-              value={formData.requested_by}
-              onChange={e => setFormData({...formData, requested_by: e.target.value})}
-              className="w-full border rounded-lg p-2"
-              required
-            >
-              <option value="">Select staff...</option>
-              {staff.map((s: any) => (
-                <option key={s.id} value={s.id}>
-                  {s.staff_name} - {s.department || 'No Dept'} {s.email ? '✓' : '⚠️'}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Requester field - show as text if user has staffId, else show dropdown */}
+          {hasStaffId ? (
+            <div>
+              <label className="block text-sm font-medium mb-1">Requester</label>
+              <input
+                type="text"
+                value={user?.staffName || 'Current User'}
+                className="w-full border rounded-lg p-2 bg-gray-100"
+                disabled
+              />
+              <input type="hidden" value={formData.requested_by} />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium mb-1">Requester *</label>
+              <select 
+                value={formData.requested_by}
+                onChange={e => setFormData({...formData, requested_by: e.target.value})}
+                className="w-full border rounded-lg p-2"
+                required
+              >
+                <option value="">Select staff...</option>
+                {staff?.map((s: any) => (
+                  <option key={s.id} value={s.id}>
+                    {s.staff_name} - {s.department || 'No Dept'} {s.email ? '✓' : '⚠️'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium mb-1">Place of Departure *</label>

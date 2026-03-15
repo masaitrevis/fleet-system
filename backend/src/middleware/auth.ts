@@ -7,6 +7,10 @@ export interface AuthRequest extends Request {
     userId: string;
     email: string;
     role: string;
+    staffId?: string | null;
+    staffRole?: string | null;
+    department?: string | null;
+    branch?: string | null;
   };
 }
 
