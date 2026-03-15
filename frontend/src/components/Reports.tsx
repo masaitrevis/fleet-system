@@ -25,9 +25,35 @@ interface FuelRecord {
   amount: number;
 }
 
+interface Route {
+  id: string;
+  route_date: string;
+  vehicle_id: string;
+  registration_num?: string;
+  start_location: string;
+  destination: string;
+  distance_km: number;
+  driver_name?: string;
+  status: string;
+}
+
+interface Repair {
+  id: string;
+  repair_date: string;
+  registration_num: string;
+  description: string;
+  repair_type: string;
+  cost: number;
+  status: string;
+  service_provider: string;
+}
+
 export default function Reports({ apiUrl }: ReportsProps) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [repairs, setRepairs] = useState<Repair[]>([]);
+  const [loading, setLoading] = useState(false);
   const [reportType, setReportType] = useState('fleet');
   const [dateRange, setDateRange] = useState('30');
 
@@ -38,15 +64,36 @@ export default function Reports({ apiUrl }: ReportsProps) {
   }, []);
 
   const fetchData = async () => {
+    setLoading(true);
     const headers = { 'Authorization': `Bearer ${token}` };
     
-    const [vRes, fRes] = await Promise.all([
-      fetch(`${apiUrl}/vehicles`, { headers }),
-      fetch(`${apiUrl}/fuel`, { headers })
-    ]);
+    try {
+      const [vRes, fRes, rRes, repRes] = await Promise.all([
+        fetch(`${apiUrl}/vehicles`, { headers }),
+        fetch(`${apiUrl}/fuel`, { headers }),
+        fetch(`${apiUrl}/routes`, { headers }),
+        fetch(`${apiUrl}/repairs`, { headers })
+      ]);
+      
+      if (vRes.ok) setVehicles(await vRes.json());
+      if (fRes.ok) setFuelRecords(await fRes.json());
+      if (rRes.ok) setRoutes(await rRes.json());
+      if (repRes.ok) setRepairs(await repRes.json());
+    } catch (err) {
+      console.error('Failed to fetch report data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filterByDateRange = (data: any[], dateField: string) => {
+    if (dateRange === 'all') return data;
     
-    if (vRes.ok) setVehicles(await vRes.json());
-    if (fRes.ok) setFuelRecords(await fRes.json());
+    const days = parseInt(dateRange);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    
+    return data.filter(item => new Date(item[dateField]) >= cutoff);
   };
 
   const exportToExcel = () => {
@@ -64,7 +111,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
         filename = 'fleet-report.xlsx';
         break;
       case 'fuel':
-        data = (fuelRecords || []).map(f => ({
+        data = filterByDateRange(fuelRecords || [], 'fuel_date').map(f => ({
           'Date': f.fuel_date,
           'Vehicle': f.registration_num,
           'Distance (km)': f.distance_km,
@@ -74,9 +121,30 @@ export default function Reports({ apiUrl }: ReportsProps) {
         }));
         filename = 'fuel-report.xlsx';
         break;
-      default:
-        alert('Excel export not available for this report type');
-        return;
+      case 'routes':
+        data = filterByDateRange(routes || [], 'route_date').map(r => ({
+          'Date': r.route_date,
+          'Vehicle': r.registration_num || r.vehicle_id,
+          'From': r.start_location,
+          'To': r.destination,
+          'Distance (km)': r.distance_km,
+          'Driver': r.driver_name || '-',
+          'Status': r.status
+        }));
+        filename = 'routes-report.xlsx';
+        break;
+      case 'repairs':
+        data = filterByDateRange(repairs || [], 'repair_date').map(r => ({
+          'Date': r.repair_date,
+          'Vehicle': r.registration_num,
+          'Type': r.repair_type,
+          'Description': r.description,
+          'Provider': r.service_provider,
+          'Cost': r.cost,
+          'Status': r.status
+        }));
+        filename = 'repairs-report.xlsx';
+        break;
     }
 
     if (data.length === 0) {
@@ -100,17 +168,17 @@ export default function Reports({ apiUrl }: ReportsProps) {
         filename = 'fleet-report.csv';
         break;
       case 'fuel':
-        data = fuelRecords || [];
+        data = filterByDateRange(fuelRecords || [], 'fuel_date');
         filename = 'fuel-report.csv';
         break;
-      default:
-        alert('CSV export not available for this report type');
-        return;
-    }
-
-    if (data.length === 0) {
-      alert('No data to export');
-      return;
+      case 'routes':
+        data = filterByDateRange(routes || [], 'route_date');
+        filename = 'routes-report.csv';
+        break;
+      case 'repairs':
+        data = filterByDateRange(repairs || [], 'repair_date');
+        filename = 'repairs-report.csv';
+        break;
     }
 
     if (data.length === 0) {
@@ -146,11 +214,18 @@ export default function Reports({ apiUrl }: ReportsProps) {
       case 'fuel':
         title = 'Fuel Report';
         headers = ['Date', 'Vehicle', 'Distance', 'Fuel', 'Efficiency', 'Cost'];
-        data = (fuelRecords || []).map(f => [f.fuel_date, f.registration_num, f.distance_km, f.quantity_liters, f.km_per_liter, f.amount]);
+        data = filterByDateRange(fuelRecords || [], 'fuel_date').map(f => [f.fuel_date, f.registration_num, f.distance_km, f.quantity_liters, f.km_per_liter, f.amount]);
         break;
-      default:
-        alert('PDF export not available for this report type');
-        return;
+      case 'routes':
+        title = 'Route History Report';
+        headers = ['Date', 'Vehicle', 'From', 'To', 'Distance', 'Status'];
+        data = filterByDateRange(routes || [], 'route_date').map(r => [r.route_date, r.registration_num || r.vehicle_id, r.start_location, r.destination, r.distance_km, r.status]);
+        break;
+      case 'repairs':
+        title = 'Maintenance Report';
+        headers = ['Date', 'Vehicle', 'Type', 'Provider', 'Cost', 'Status'];
+        data = filterByDateRange(repairs || [], 'repair_date').map(r => [r.repair_date, r.registration_num, r.repair_type, r.service_provider, r.cost, r.status]);
+        break;
     }
 
     if (data.length === 0) {
@@ -160,16 +235,27 @@ export default function Reports({ apiUrl }: ReportsProps) {
 
     doc.text(title, 14, 15);
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 25);
+    doc.text(`Period: ${dateRange === 'all' ? 'All Time' : `Last ${dateRange} days`}`, 14, 32);
     
     (doc as any).autoTable({
       head: [headers],
       body: data,
-      startY: 35,
+      startY: 40,
       theme: 'grid',
       headStyles: { fillColor: [37, 99, 235] }
     });
 
     doc.save(`${reportType}-report.pdf`);
+  };
+
+  const getFilteredData = () => {
+    switch (reportType) {
+      case 'fleet': return vehicles || [];
+      case 'fuel': return filterByDateRange(fuelRecords || [], 'fuel_date');
+      case 'routes': return filterByDateRange(routes || [], 'route_date');
+      case 'repairs': return filterByDateRange(repairs || [], 'repair_date');
+      default: return [];
+    }
   };
 
   return (
@@ -208,24 +294,33 @@ export default function Reports({ apiUrl }: ReportsProps) {
               <option value="all">All time</option>
             </select>
           </div>
+          
+          <div className="flex items-end">
+            <div className="text-sm text-gray-500">
+              {loading ? 'Loading...' : `${getFilteredData().length} records found`}
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-3">
           <button 
             onClick={exportToExcel}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+            disabled={loading}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50"
           >
             📊 Export Excel
           </button>
           <button 
             onClick={exportToCSV}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            disabled={loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"
           >
             📄 Export CSV
           </button>
           <button 
             onClick={exportToPDF}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2"
+            disabled={loading}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 disabled:opacity-50"
           >
             📕 Export PDF
           </button>
@@ -271,7 +366,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
                 </tr>
               </thead>
               <tbody>
-                {fuelRecords?.slice(0, 10).map(f => (
+                {filterByDateRange(fuelRecords || [], 'fuel_date').slice(0, 10).map(f => (
                   <tr key={f.id} className="border-b">
                     <td className="p-3">{f.fuel_date}</td>
                     <td className="p-3">{f.registration_num}</td>
@@ -283,6 +378,64 @@ export default function Reports({ apiUrl }: ReportsProps) {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {reportType === 'routes' && (
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left p-3">Date</th>
+                  <th className="text-left p-3">Vehicle</th>
+                  <th className="text-left p-3">From</th>
+                  <th className="text-left p-3">To</th>
+                  <th className="text-left p-3">Distance</th>
+                  <th className="text-left p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filterByDateRange(routes || [], 'route_date').slice(0, 10).map(r => (
+                  <tr key={r.id} className="border-b">
+                    <td className="p-3">{r.route_date}</td>
+                    <td className="p-3">{r.registration_num || r.vehicle_id}</td>
+                    <td className="p-3">{r.start_location}</td>
+                    <td className="p-3">{r.destination}</td>
+                    <td className="p-3">{r.distance_km} km</td>
+                    <td className="p-3">{r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {reportType === 'repairs' && (
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left p-3">Date</th>
+                  <th className="text-left p-3">Vehicle</th>
+                  <th className="text-left p-3">Type</th>
+                  <th className="text-left p-3">Provider</th>
+                  <th className="text-left p-3">Cost</th>
+                  <th className="text-left p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filterByDateRange(repairs || [], 'repair_date').slice(0, 10).map(r => (
+                  <tr key={r.id} className="border-b">
+                    <td className="p-3">{r.repair_date}</td>
+                    <td className="p-3">{r.registration_num}</td>
+                    <td className="p-3">{r.repair_type}</td>
+                    <td className="p-3">{r.service_provider}</td>
+                    <td className="p-3">${r.cost}</td>
+                    <td className="p-3">{r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          
+          {getFilteredData().length === 0 && (
+            <p className="text-center py-8 text-gray-500">No data available for selected period</p>
           )}
         </div>
       </div>
