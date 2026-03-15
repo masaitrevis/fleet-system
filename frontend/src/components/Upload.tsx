@@ -20,8 +20,19 @@ export default function Upload({ apiUrl }: UploadProps) {
 
   const token = localStorage.getItem('token');
 
+  const handleReLogin = () => {
+    localStorage.removeItem('token');
+    window.location.reload();
+  };
+
   const handleUpload = async () => {
     if (!file) return;
+
+    // Check if token exists
+    if (!token) {
+      setError('No authentication token found. Please login again.');
+      return;
+    }
 
     setUploading(true);
     setError(null);
@@ -42,6 +53,8 @@ export default function Upload({ apiUrl }: UploadProps) {
       
       if (response.ok) {
         setResult(data.imported);
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Your session has expired. Please logout and login again to get a new token.');
       } else {
         setError(data.error || 'Upload failed');
       }
@@ -105,7 +118,15 @@ export default function Upload({ apiUrl }: UploadProps) {
 
         {error && (
           <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg">
-            ❌ {error}
+            <p className="mb-3">❌ {error}</p>
+            {(error.includes('expired') || error.includes('token')) && (
+              <button
+                onClick={handleReLogin}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+              >
+                🔑 Click to Re-Login
+              </button>
+            )}
           </div>
         )}
 
