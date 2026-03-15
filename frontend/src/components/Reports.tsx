@@ -75,12 +75,39 @@ export default function Reports({ apiUrl }: ReportsProps) {
         fetch(`${apiUrl}/repairs`, { headers })
       ]);
       
-      if (vRes.ok) setVehicles(await vRes.json());
-      if (fRes.ok) setFuelRecords(await fRes.json());
-      if (rRes.ok) setRoutes(await rRes.json());
-      if (repRes.ok) setRepairs(await repRes.json());
+      if (vRes.ok) {
+        const data = await vRes.json();
+        setVehicles(Array.isArray(data) ? data : []);
+      } else {
+        setVehicles([]);
+      }
+      
+      if (fRes.ok) {
+        const data = await fRes.json();
+        setFuelRecords(Array.isArray(data) ? data : []);
+      } else {
+        setFuelRecords([]);
+      }
+      
+      if (rRes.ok) {
+        const data = await rRes.json();
+        setRoutes(Array.isArray(data) ? data : []);
+      } else {
+        setRoutes([]);
+      }
+      
+      if (repRes.ok) {
+        const data = await repRes.json();
+        setRepairs(Array.isArray(data) ? data : []);
+      } else {
+        setRepairs([]);
+      }
     } catch (err) {
-      console.error('Failed to fetch report data');
+      console.error('Failed to fetch report data:', err);
+      setVehicles([]);
+      setFuelRecords([]);
+      setRoutes([]);
+      setRepairs([]);
     } finally {
       setLoading(false);
     }
@@ -398,16 +425,20 @@ export default function Reports({ apiUrl }: ReportsProps) {
                 </tr>
               </thead>
               <tbody>
-                {filterByDateRange(fuelRecords || [], 'fuel_date').slice(0, 10).map(f => (
-                  <tr key={f.id} className="border-b">
-                    <td className="p-3">{f.fuel_date}</td>
-                    <td className="p-3">{f.registration_num}</td>
-                    <td className="p-3">{f.distance_km}</td>
-                    <td className="p-3">{f.quantity_liters}</td>
-                    <td className="p-3">{f.km_per_liter?.toFixed(2)} km/L</td>
-                    <td className="p-3">${f.amount}</td>
-                  </tr>
-                ))}
+                {(fuelRecords || []).length === 0 ? (
+                  <tr><td colSpan={6} className="p-8 text-center text-gray-500">No fuel records found</td></tr>
+                ) : (
+                  filterByDateRange(fuelRecords || [], 'fuel_date').slice(0, 10).map(f => (
+                    <tr key={f.id} className="border-b">
+                      <td className="p-3">{f.fuel_date || '-'}</td>
+                      <td className="p-3">{f.registration_num || '-'}</td>
+                      <td className="p-3">{f.distance_km || '-'}</td>
+                      <td className="p-3">{f.quantity_liters || '-'}</td>
+                      <td className="p-3">{f.km_per_liter ? f.km_per_liter.toFixed(2) : '-'} km/L</td>
+                      <td className="p-3">${f.amount || '-'}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           )}
