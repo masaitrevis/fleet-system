@@ -10,21 +10,52 @@ const SALT_ROUNDS = 10;
 
 // Register
 router.post('/register', async (req, res) => {
-  const { email, password, role = 'viewer' } = req.body;
+  const { 
+    email, 
+    password, 
+    role = 'viewer',
+    staffName,
+    staffNo,
+    department,
+    branch,
+    phone
+  } = req.body;
+  
+  // Determine if this is a job role (Driver, Transport, etc.) or login role
+  const jobRoles = ['Driver', 'Transport Supervisor', 'Departmental Supervisor', 'Head of Department', 'Security Personnel'];
+  const isJobRole = jobRoles.includes(role);
+  
+  // Map job role to appropriate login role
+  const loginRole = isJobRole ? 'viewer' : role;
   
   try {
     const hashedPassword = bcrypt.hashSync(password, SALT_ROUNDS);
-    const id = uuidv4();
+    const userId = uuidv4();
     
+    // Create user record
     await query(
       'INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)',
-      [id, email, hashedPassword, role]
+      [userId, email, hashedPassword, loginRole]
     );
     
-    res.status(201).json({ message: 'User created' });
+    // If job role selected, also create staff record
+    if (isJobRole && staffName) {
+      const staffId = uuidv4();
+      await query(
+        `INSERT INTO staff (id, staff_no, staff_name, email, phone, department, branch, role) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [staffId, staffNo || null, staffName, email, phone || null, department || null, branch || null, role]
+      );
+    }
+    
+    res.status(201).json({ 
+      message: 'User created successfully',
+      role: isJobRole ? role : loginRole,
+      isJobRole
+    });
   } catch (error: any) {
     if (error.message?.includes('UNIQUE constraint failed')) {
-      res.status(400).json({ error: 'Email already exists' });
+      res.status(400).json({ error: 'Email or staff number already exists' });
     } else {
       res.status(500).json({ error: 'Registration failed' });
     }

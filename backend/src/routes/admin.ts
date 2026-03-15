@@ -8,7 +8,18 @@ const router = Router();
 router.get('/users', authenticateToken, requireRole(['admin']), async (req: AuthRequest, res) => {
   try {
     console.log('Admin users request from:', req.user?.email, 'with role:', req.user?.role);
-    const users = await query('SELECT id, email, role, created_at FROM users ORDER BY created_at DESC');
+    const users = await query(`
+      SELECT 
+        u.id, 
+        u.email, 
+        u.role, 
+        u.created_at,
+        s.staff_name,
+        s.role as staff_role
+      FROM users u
+      LEFT JOIN staff s ON u.email = s.email
+      ORDER BY u.created_at DESC
+    `);
     console.log('Found users:', users.length);
     res.json(users);
   } catch (error: any) {
