@@ -36,6 +36,12 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
   const [completedTrips, setCompletedTrips] = useState<Requisition[]>([]);
   const [loading, setLoading] = useState(false);
   const [ratingTrip, setRatingTrip] = useState<Requisition | null>(null);
+  const [inspectingTrip, setInspectingTrip] = useState<Requisition | null>(null);
+  const [inspectionChecks, setInspectionChecks] = useState({
+    tires_ok: true, brakes_ok: true, lights_ok: true, oil_ok: true, coolant_ok: true,
+    battery_ok: true, wipers_ok: true, mirrors_ok: true, seatbelts_ok: true, fuel_ok: true,
+  });
+  const [inspectionDefects, setInspectionDefects] = useState('');
   const [rating, setRating] = useState(5);
   const [ratingComment, setRatingComment] = useState('');
   const [error, setError] = useState('');
@@ -218,6 +224,40 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
     }
   };
 
+  const handleSubmitInspection = async () => {
+    if (!inspectingTrip) return;
+    
+    const allPassed = Object.values(inspectionChecks).every(v => v);
+    
+    try {
+      const res = await fetch(`${apiUrl}/requisitions/${inspectingTrip.id}/inspection`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...inspectionChecks,
+          defects_found: inspectionDefects,
+          defect_photos: [],
+          passed: allPassed && !inspectionDefects.trim()
+        })
+      });
+      
+      if (res.ok) {
+        setInspectingTrip(null);
+        setInspectionChecks({
+          tires_ok: true, brakes_ok: true, lights_ok: true, oil_ok: true, coolant_ok: true,
+          battery_ok: true, wipers_ok: true, mirrors_ok: true, seatbelts_ok: true, fuel_ok: true,
+        });
+        setInspectionDefects('');
+        loadAssignments();
+      }
+    } catch (err) {
+      console.error('Inspection error:', err);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       'pending': 'bg-yellow-100 text-yellow-800',
@@ -363,6 +403,35 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
                     {req.status}
                   </span>
                 </div>
+                
+                {/* Inspection Button - Only show if allocated (not yet inspected) */}
+                {req.status === 'allocated' && (
+                  <div className="mt-4 pt-4 border-t">
+                    <button
+                      onClick={() => setInspectingTrip(req)}
+                      className="w-full bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600"
+                    >
+                      🔍 Start Pre-Trip Inspection
+                    </button>
+                  </div>
+                )}
+                
+                {/* View Inspection Result - If already inspected */}
+                {req.status === 'ready_for_departure' && (
+                  <div className="mt-4 pt-4 border-t">
+                    <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm">
+                      ✅ Inspection passed - Ready for departure
+                    </div>
+                  </div>
+                )}
+                
+                {req.status === 'inspection_failed' && (
+                  <div className="mt-4 pt-4 border-t">
+                    <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">
+                      ❌ Inspection failed - Contact supervisor
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -515,6 +584,58 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
                 className="flex-1 bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600"
               >
                 Submit Rating
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inspection Modal */}
+      {inspectingTrip && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-4 md:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-2">🔍 Pre-Trip Inspection</h3>
+            <p className="text-gray-600 mb-4 text-sm">
+              {inspectingTrip.registration_num} - {inspectingTrip.place_of_departure} → {inspectingTrip.destination}
+            </p>
+            
+            <div className="space-y-2 mb-4">
+              {Object.entries(inspectionChecks).map(([key, value]) => (
+                <label key={key} className="flex items-center justify-between p-2 bg-gray-50 rounded cursor-pointer">
+                  <span className="text-sm capitalize">{key.replace('_ok', '').replace('_', ' ')}</span>
+                  <input
+                    type="checkbox"
+                    checked={value}
+                    onChange={(e) => setInspectionChecks({...inspectionChecks, [key]: e.target.checked})}
+                    className="w-5 h-5 text-blue-600"
+                  />
+                </label>
+              ))}
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Defects found (optional)</label>
+              <textarea
+                value={inspectionDefects}
+                onChange={(e) => setInspectionDefects(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+                rows={2}
+                placeholder="Describe any defects..."
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setInspectingTrip(null); setInspectionDefects(''); }}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitInspection}
+                className="flex-1 bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 text-sm"
+              >
+                Submit Inspection
               </button>
             </div>
           </div>

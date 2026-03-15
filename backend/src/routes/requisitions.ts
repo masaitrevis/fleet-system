@@ -197,7 +197,11 @@ router.get('/pending-allocations', async (req: any, res) => {
 
 // Get my assignments (for drivers)
 router.get('/my-assignments', async (req: any, res) => {
-  const userId = req.user?.userId;
+  const staffId = req.user?.staffId;
+  
+  if (!staffId) {
+    return res.status(400).json({ error: 'No staff record linked to your account' });
+  }
   
   try {
     const result = await query(`
@@ -209,7 +213,7 @@ router.get('/my-assignments', async (req: any, res) => {
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       WHERE r.driver_id = ?
       ORDER BY r.travel_date DESC
-    `, [userId]);
+    `, [staffId]);
     
     res.json(result);
   } catch (error) {
