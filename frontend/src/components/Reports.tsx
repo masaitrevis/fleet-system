@@ -55,7 +55,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
 
     switch (reportType) {
       case 'fleet':
-        data = vehicles.map(v => ({
+        data = (vehicles || []).map(v => ({
           'Registration': v.registration_num,
           'Make/Model': v.make_model,
           'Status': v.status,
@@ -64,7 +64,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
         filename = 'fleet-report.xlsx';
         break;
       case 'fuel':
-        data = fuelRecords.map(f => ({
+        data = (fuelRecords || []).map(f => ({
           'Date': f.fuel_date,
           'Vehicle': f.registration_num,
           'Distance (km)': f.distance_km,
@@ -74,6 +74,14 @@ export default function Reports({ apiUrl }: ReportsProps) {
         }));
         filename = 'fuel-report.xlsx';
         break;
+      default:
+        alert('Excel export not available for this report type');
+        return;
+    }
+
+    if (data.length === 0) {
+      alert('No data to export');
+      return;
     }
 
     const ws = XLSX.utils.json_to_sheet(data);
@@ -88,15 +96,28 @@ export default function Reports({ apiUrl }: ReportsProps) {
 
     switch (reportType) {
       case 'fleet':
-        data = vehicles;
+        data = vehicles || [];
         filename = 'fleet-report.csv';
         break;
       case 'fuel':
-        data = fuelRecords;
+        data = fuelRecords || [];
         filename = 'fuel-report.csv';
         break;
+      default:
+        alert('CSV export not available for this report type');
+        return;
     }
 
+    if (data.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    if (data.length === 0) {
+      alert('No data to export');
+      return;
+    }
+    
     const headers = Object.keys(data[0] || {}).join(',');
     const rows = data.map(row => Object.values(row).join(','));
     const csv = [headers, ...rows].join('\n');
@@ -120,13 +141,21 @@ export default function Reports({ apiUrl }: ReportsProps) {
       case 'fleet':
         title = 'Fleet Report';
         headers = ['Registration', 'Make/Model', 'Status', 'Mileage'];
-        data = vehicles.map(v => [v.registration_num, v.make_model, v.status, v.current_mileage]);
+        data = (vehicles || []).map(v => [v.registration_num, v.make_model, v.status, v.current_mileage]);
         break;
       case 'fuel':
         title = 'Fuel Report';
         headers = ['Date', 'Vehicle', 'Distance', 'Fuel', 'Efficiency', 'Cost'];
-        data = fuelRecords.map(f => [f.fuel_date, f.registration_num, f.distance_km, f.quantity_liters, f.km_per_liter, f.amount]);
+        data = (fuelRecords || []).map(f => [f.fuel_date, f.registration_num, f.distance_km, f.quantity_liters, f.km_per_liter, f.amount]);
         break;
+      default:
+        alert('PDF export not available for this report type');
+        return;
+    }
+
+    if (data.length === 0) {
+      alert('No data to export');
+      return;
     }
 
     doc.text(title, 14, 15);
@@ -217,7 +246,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
                 </tr>
               </thead>
               <tbody>
-                {vehicles.slice(0, 10).map(v => (
+                {vehicles?.slice(0, 10).map(v => (
                   <tr key={v.id} className="border-b">
                     <td className="p-3">{v.registration_num}</td>
                     <td className="p-3">{v.make_model}</td>
@@ -242,7 +271,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
                 </tr>
               </thead>
               <tbody>
-                {fuelRecords.slice(0, 10).map(f => (
+                {fuelRecords?.slice(0, 10).map(f => (
                   <tr key={f.id} className="border-b">
                     <td className="p-3">{f.fuel_date}</td>
                     <td className="p-3">{f.registration_num}</td>
