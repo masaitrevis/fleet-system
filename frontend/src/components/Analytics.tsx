@@ -161,7 +161,7 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
                     outerRadius={80}
                     dataKey="value"
                   >
-                    {fleetStatusData.map((entry, index) => (
+                    {fleetStatusData?.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -210,36 +210,43 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
                 </tr>
               </thead>
               <tbody>
-                {drivers
-                  .sort((a, b) => b.rating - a.rating)
+                {(drivers || []).length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-gray-500">
+                      No driver data available
+                    </td>
+                  </tr>
+                )}
+                {(drivers || [])
+                  .sort((a, b) => (b.rating || 0) - (a.rating || 0))
                   .map((driver, index) => (
-                  <tr key={driver.id} className="border-b hover:bg-gray-50">
+                  <tr key={driver.id || index} className="border-b hover:bg-gray-50">
                     <td className="p-4">
                       {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
                     </td>
-                    <td className="p-4 font-medium">{driver.name}</td>
-                    <td className="p-4 text-center">{driver.trips}</td>
-                    <td className="p-4 text-center">{driver.fuelEfficiency.toFixed(1)}</td>
+                    <td className="p-4 font-medium">{driver.name || 'Unknown'}</td>
+                    <td className="p-4 text-center">{driver.trips || 0}</td>
+                    <td className="p-4 text-center">{(driver.fuelEfficiency || 0).toFixed(1)}</td>
                     <td className="p-4 text-center">
-                      <span className={`px-2 py-1 rounded text-sm ${driver.onTimePerformance >= 95 ? 'bg-green-100 text-green-800' : driver.onTimePerformance >= 90 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
-                        {driver.onTimePerformance}%
+                      <span className={`px-2 py-1 rounded text-sm ${(driver.onTimePerformance || 0) >= 95 ? 'bg-green-100 text-green-800' : (driver.onTimePerformance || 0) >= 90 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                        {driver.onTimePerformance || 0}%
                       </span>
                     </td>
-                    <td className="p-4 text-center">{driver.experience}</td>
+                    <td className="p-4 text-center">{driver.experience || 0}</td>
                     <td className="p-4 text-center">
-                      <span className={driver.variance <= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {driver.variance > 0 ? '+' : ''}{driver.variance.toFixed(1)}%
+                      <span className={(driver.variance || 0) <= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {(driver.variance || 0) > 0 ? '+' : ''}{(driver.variance || 0).toFixed(1)}%
                       </span>
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-16 bg-gray-200 rounded-full h-2">
                           <div 
-                            className={`h-2 rounded-full ${driver.rating >= 90 ? 'bg-green-500' : driver.rating >= 80 ? 'bg-blue-500' : 'bg-yellow-500'}`}
-                            style={{ width: `${driver.rating}%` }}
+                            className={`h-2 rounded-full ${(driver.rating || 0) >= 90 ? 'bg-green-500' : (driver.rating || 0) >= 80 ? 'bg-blue-500' : 'bg-yellow-500'}`}
+                            style={{ width: `${driver.rating || 0}%` }}
                           />
                         </div>
-                        <span className="font-bold">{driver.rating}</span>
+                        <span className="font-bold">{driver.rating || 0}</span>
                       </div>
                     </td>
                   </tr>
@@ -276,7 +283,7 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
             <div className="bg-white p-6 rounded-xl shadow">
               <h3 className="text-lg font-semibold mb-4">Maintenance by Category</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={maintenance}>
+                <BarChart data={maintenance || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="category" angle={-45} textAnchor="end" height={80} />
                   <YAxis />
@@ -289,7 +296,7 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
             <div className="bg-white p-6 rounded-xl shadow">
               <h3 className="text-lg font-semibold mb-4">Average Cost by Category</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={maintenance}>
+                <BarChart data={maintenance || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="category" angle={-45} textAnchor="end" height={80} />
                   <YAxis />
