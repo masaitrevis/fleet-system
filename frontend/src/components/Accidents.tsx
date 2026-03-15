@@ -234,7 +234,7 @@ export default function Accidents({ apiUrl, user }: AccidentsProps) {
                 required
               >
                 <option value="">Select Vehicle</option>
-                {vehicles.map(v => <option key={v.id} value={v.id}>{v.registration_num}</option>)}
+                {vehicles?.map(v => <option key={v.id} value={v.id}>{v.registration_num}</option>)}
               </select>
             </div>
             <div>
@@ -246,7 +246,7 @@ export default function Accidents({ apiUrl, user }: AccidentsProps) {
                 required
               >
                 <option value="">Select Driver</option>
-                {drivers.map(d => <option key={d.id} value={d.id}>{d.staff_name}</option>)}
+                {drivers?.map(d => <option key={d.id} value={d.id}>{d.staff_name}</option>)}
               </select>
             </div>
             <div>
@@ -429,7 +429,7 @@ export default function Accidents({ apiUrl, user }: AccidentsProps) {
               <div className="bg-white p-6 rounded-xl shadow">
                 <h3 className="text-lg font-semibold mb-4">✅ Corrective Actions</h3>
                 <div className="space-y-4">
-                  {selectedAccident.capa.map((action: any) => (
+                  {selectedAccident.capa?.map((action: any) => (
                     <div key={action.id} className="border p-4 rounded-lg">
                       <p className="font-medium">{action.action_description}</p>
                       <div className="flex gap-4 text-sm mt-2">
@@ -455,7 +455,7 @@ export default function Accidents({ apiUrl, user }: AccidentsProps) {
               <div className="bg-white p-4 rounded-xl shadow">
                 <h4 className="font-semibold mb-3">👥 Witnesses</h4>
                 <div className="space-y-3">
-                  {selectedAccident.witnesses.map((w: any) => (
+                  {selectedAccident.witnesses?.map((w: any) => (
                     <div key={w.id} className="text-sm">
                       <p className="font-medium">{w.witness_name}</p>
                       <p className="text-gray-500">{w.witness_contact}</p>
@@ -469,7 +469,7 @@ export default function Accidents({ apiUrl, user }: AccidentsProps) {
               <div className="bg-white p-4 rounded-xl shadow">
                 <h4 className="font-semibold mb-3">📎 Evidence</h4>
                 <div className="space-y-2">
-                  {selectedAccident.evidence.map((e: any) => (
+                  {selectedAccident.evidence?.map((e: any) => (
                     <div key={e.id} className="text-sm">
                       <span className="px-2 py-1 bg-gray-100 rounded">{e.evidence_type}</span>
                       <p className="text-gray-500 mt-1">{e.file_name}</p>
@@ -624,7 +624,7 @@ export default function Accidents({ apiUrl, user }: AccidentsProps) {
             ) : accidents.length === 0 ? (
               <tr><td colSpan={8} className="p-8 text-center text-gray-500">No accidents reported</td></tr>
             ) : (
-              accidents.map(accident => (
+              accidents?.map(accident => (
                 <tr key={accident.id} className="border-b hover:bg-gray-50">
                   <td className="p-4 font-medium">{accident.case_number}</td>
                   <td className="p-4">{new Date(accident.accident_date).toLocaleDateString()}</td>

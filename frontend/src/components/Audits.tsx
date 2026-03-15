@@ -203,7 +203,7 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
               className="w-full border p-2 rounded"
             >
               <option value="">Select Template</option>
-              {templates.map(t => (
+              {templates?.map(t => (
                 <option key={t.id} value={t.id}>{t.template_name} ({t.questions?.length || 0} questions)</option>
               ))}
             </select>
@@ -233,7 +233,7 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
           <div>
             <label className="block text-sm font-medium mb-2">Select Vehicles to Audit (Optional)</label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-60 overflow-y-auto border p-4 rounded">
-              {vehicles.map(v => (
+              {vehicles?.map(v => (
                 <label key={v.id} className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -566,7 +566,7 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
             {sessions.length === 0 ? (
               <tr><td colSpan={8} className="p-8 text-center text-gray-500">No audits conducted yet</td></tr>
             ) : (
-              sessions.map(session => (
+              sessions?.map(session => (
                 <tr key={session.id} className="border-b hover:bg-gray-50">
                   <td className="p-4 font-medium">{session.audit_number}</td>
                   <td className="p-4">{session.template_name}</td>

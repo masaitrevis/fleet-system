@@ -154,7 +154,7 @@ export default function Fleet({ apiUrl }: FleetProps) {
             </tr>
           </thead>
           <tbody>
-            {vehicles.map(v => (
+            {vehicles?.map(v => (
               <tr key={v.id} className="border-b hover:bg-gray-50">
                 <td className="p-4 font-medium">{v.registration_num}</td>
                 <td className="p-4">{v.make_model || '-'}</td>

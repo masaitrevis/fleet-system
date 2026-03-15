@@ -14,7 +14,9 @@ import Accidents from './components/Accidents';
 import Audits from './components/Audits';
 import RequisitionModule from './components/requisition/RequisitionModule';
 
-export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'requisitions';
+import Admin from './components/Admin';
+
+export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'requisitions' | 'admin';
 
 // Force correct API URL - env vars not reliable in Netlify
 const API_URL = 'https://fleet-api-0272.onrender.com/api';
@@ -40,6 +42,7 @@ function AppContent() {
     { key: 'analytics', label: 'Analytics', icon: '📈', roles: ['admin', 'manager', 'hod'] },
     { key: 'reports', label: 'Reports', icon: '📝', roles: ['admin', 'manager', 'hod', 'transport_supervisor'] },
     { key: 'upload', label: 'Import', icon: '📤', roles: ['admin', 'manager'] },
+    { key: 'admin', label: 'Admin', icon: '⚙️', roles: ['admin'] },
   ];
 
   const effectiveRole = user?.staffRole 
@@ -62,6 +65,7 @@ function AppContent() {
       case 'analytics': return <Analytics apiUrl={API_URL} />;
       case 'upload': return <Upload apiUrl={API_URL} />;
       case 'reports': return <Reports apiUrl={API_URL} />;
+      case 'admin': return <Admin apiUrl={API_URL} />;
       default: return <Dashboard apiUrl={API_URL} />;
     }
   };

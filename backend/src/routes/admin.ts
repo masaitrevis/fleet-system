@@ -1,7 +1,18 @@
 import { Router } from 'express';
 import { query } from '../database';
+import { authenticateToken, requireRole } from '../middleware/auth';
 
 const router = Router();
+
+// Get all users (admin only)
+router.get('/users', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const users = await query('SELECT id, email, role, created_at FROM users ORDER BY created_at DESC');
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
 
 // Run migration to add email and phone columns
 router.post('/migrate-staff-contact', async (req, res) => {

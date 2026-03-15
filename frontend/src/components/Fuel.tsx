@@ -138,7 +138,7 @@ export default function Fuel({ apiUrl }: FuelProps) {
             
             <select value={formData.vehicle_id} onChange={e => handleVehicleChange(e.target.value)} className="border p-2 rounded" required>
               <option value="">Select Vehicle</option>
-              {vehicles.map(v => <option key={v.id} value={v.id}>{v.registration_num}</option>)}
+              {vehicles?.map(v => <option key={v.id} value={v.id}>{v.registration_num}</option>)}
             </select>
             
             <input placeholder="Card Number" value={formData.card_num} onChange={e => setFormData({...formData, card_num: e.target.value})} className="border p-2 rounded" />
@@ -176,7 +176,7 @@ export default function Fuel({ apiUrl }: FuelProps) {
             </tr>
           </thead>
           <tbody>
-            {records.map(r => (
+            {records?.map(r => (
               <tr key={r.id} className="border-b hover:bg-gray-50">
                 <td className="p-4">{r.fuel_date}</td>
                 <td className="p-4 font-medium">{r.registration_num}</td>
