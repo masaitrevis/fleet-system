@@ -81,9 +81,14 @@ router.get('/my-requests', async (req: any, res) => {
   
   try {
     const result = await query(`
-      SELECT r.*, s.staff_name, s.email, s.department
+      SELECT r.*, 
+        s.staff_name as requester_name, 
+        d.staff_name as driver_name,
+        v.registration_num
       FROM requisitions r
       JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
       WHERE r.requested_by = ?
       ORDER BY r.created_at DESC
     `, [userId]);
@@ -129,6 +134,47 @@ router.get('/pending-approvals', async (req: any, res) => {
   } catch (error) {
     console.error('Get pending approvals error:', error);
     res.status(500).json({ error: 'Failed to fetch pending approvals' });
+  }
+});
+
+// Get pending allocations (approved but not yet allocated)
+router.get('/pending-allocations', async (req: any, res) => {
+  try {
+    const result = await query(`
+      SELECT r.*, s.staff_name as requester_name, s.department
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.status = 'approved' AND r.vehicle_id IS NULL
+      ORDER BY r.created_at DESC
+    `);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Get pending allocations error:', error);
+    res.status(500).json({ error: 'Failed to fetch pending allocations' });
+  }
+});
+
+// Get my assignments (for drivers)
+router.get('/my-assignments', async (req: any, res) => {
+  const userId = req.user?.userId;
+  
+  try {
+    const result = await query(`
+      SELECT r.*, 
+        s.staff_name as requester_name,
+        v.registration_num, v.make_model
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      WHERE r.driver_id = ?
+      ORDER BY r.travel_date DESC
+    `, [userId]);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Get my assignments error:', error);
+    res.status(500).json({ error: 'Failed to fetch assignments' });
   }
 });
 
