@@ -81,20 +81,41 @@ router.post('/', async (req, res) => {
 router.get('/my-requests', async (req: any, res) => {
   // Use staffId if available (for job roles), otherwise fall back to userId
   const staffId = req.user?.staffId || req.user?.userId;
+  const userEmail = req.user?.email;
   
   try {
-    const result = await query(`
-      SELECT r.*, 
-        s.staff_name as requester_name, 
-        d.staff_name as driver_name,
-        v.registration_num
-      FROM requisitions r
-      JOIN staff s ON r.requested_by = s.id
-      LEFT JOIN staff d ON r.driver_id = d.id
-      LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      WHERE r.requested_by = ?
-      ORDER BY r.created_at DESC
-    `, [staffId]);
+    // For managers/admins without staff records: show all requests they created OR all requests
+    const isManager = ['admin', 'manager'].includes(req.user?.role);
+    
+    let result;
+    if (isManager && !req.user?.staffId) {
+      // Manager without staff record - show ALL requests
+      result = await query(`
+        SELECT r.*, 
+          s.staff_name as requester_name, 
+          d.staff_name as driver_name,
+          v.registration_num
+        FROM requisitions r
+        JOIN staff s ON r.requested_by = s.id
+        LEFT JOIN staff d ON r.driver_id = d.id
+        LEFT JOIN vehicles v ON r.vehicle_id = v.id
+        ORDER BY r.created_at DESC
+      `);
+    } else {
+      // Staff member - show only their requests
+      result = await query(`
+        SELECT r.*, 
+          s.staff_name as requester_name, 
+          d.staff_name as driver_name,
+          v.registration_num
+        FROM requisitions r
+        JOIN staff s ON r.requested_by = s.id
+        LEFT JOIN staff d ON r.driver_id = d.id
+        LEFT JOIN vehicles v ON r.vehicle_id = v.id
+        WHERE r.requested_by = ?
+        ORDER BY r.created_at DESC
+      `, [staffId]);
+    }
     
     res.json(result);
   } catch (error) {
