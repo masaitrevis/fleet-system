@@ -12,7 +12,9 @@ const createTransporter = () => {
       auth: {
         user: 'apikey',
         pass: process.env.SENDGRID_API_KEY
-      }
+      },
+      connectionTimeout: 5000, // 5 seconds
+      socketTimeout: 5000
     });
   }
   
@@ -23,25 +25,27 @@ const createTransporter = () => {
       auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_PASS
-      }
+      },
+      connectionTimeout: 5000,
+      socketTimeout: 5000
     });
   }
   
-  // Default: use Ethereal for testing (fake emails that get logged)
-  return nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
-    auth: {
-      user: process.env.ETHEREAL_USER || 'test@ethereal.email',
-      pass: process.env.ETHEREAL_PASS || 'testpass'
-    }
-  });
+  // Default: No email - just log to console (non-blocking)
+  console.log('Email: No SMTP configured, logging to console only');
+  return null;
 };
 
 const transporter = createTransporter();
 
 // Send requisition request notification
 export const sendRequisitionRequest = async (staffName: string, details: any) => {
+  // If no transporter configured, just log and return
+  if (!transporter) {
+    console.log('📧 Email (logged): New requisition from', staffName, 'to', details.destination);
+    return { success: true, messageId: 'logged-to-console' };
+  }
+
   const mailOptions = {
     from: '"Fleet System" <fleet@system.com>',
     to: OWNER_EMAIL,
@@ -65,13 +69,17 @@ export const sendRequisitionRequest = async (staffName: string, details: any) =>
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('Email failed:', error);
-    // Still return success so the request isn't blocked
-    return { success: true, messageId: 'logged-to-console' };
+    return { success: false, error: String(error) };
   }
 };
 
 // Send approval notification
 export const sendApprovalNotification = async (staffName: string, status: 'approved' | 'rejected', reason?: string) => {
+  if (!transporter) {
+    console.log(`📧 Email (logged): Requisition ${status} for ${staffName}`);
+    return { success: true };
+  }
+
   const mailOptions = {
     from: '"Fleet System" <fleet@system.com>',
     to: OWNER_EMAIL,
@@ -92,12 +100,17 @@ export const sendApprovalNotification = async (staffName: string, status: 'appro
     return { success: true };
   } catch (error) {
     console.error('Email failed:', error);
-    return { success: true };
+    return { success: false };
   }
 };
 
 // Send vehicle allocated notification
 export const sendVehicleAllocated = async (staffName: string, vehicleReg: string, driverName: string) => {
+  if (!transporter) {
+    console.log(`📧 Email (logged): Vehicle ${vehicleReg} allocated to ${staffName}, driver: ${driverName}`);
+    return { success: true };
+  }
+
   const mailOptions = {
     from: '"Fleet System" <fleet@system.com>',
     to: OWNER_EMAIL,
@@ -118,12 +131,17 @@ export const sendVehicleAllocated = async (staffName: string, vehicleReg: string
     return { success: true };
   } catch (error) {
     console.error('Email failed:', error);
-    return { success: true };
+    return { success: false };
   }
 };
 
 // Send inspection notification
 export const sendInspectionNotification = async (vehicleReg: string, driverName: string, passed: boolean) => {
+  if (!transporter) {
+    console.log(`📧 Email (logged): Inspection ${passed ? 'PASSED' : 'FAILED'} for ${vehicleReg}`);
+    return { success: true };
+  }
+
   const mailOptions = {
     from: '"Fleet System" <fleet@system.com>',
     to: OWNER_EMAIL,
@@ -144,12 +162,17 @@ export const sendInspectionNotification = async (vehicleReg: string, driverName:
     return { success: true };
   } catch (error) {
     console.error('Email failed:', error);
-    return { success: true };
+    return { success: false };
   }
 };
 
 // Send trip completed notification
 export const sendTripCompleted = async (staffName: string, vehicleReg: string, distance: number) => {
+  if (!transporter) {
+    console.log(`📧 Email (logged): Trip completed by ${staffName}, ${distance}km`);
+    return { success: true };
+  }
+
   const mailOptions = {
     from: '"Fleet System" <fleet@system.com>',
     to: OWNER_EMAIL,
@@ -170,7 +193,7 @@ export const sendTripCompleted = async (staffName: string, vehicleReg: string, d
     return { success: true };
   } catch (error) {
     console.error('Email failed:', error);
-    return { success: true };
+    return { success: false };
   }
 };
 

@@ -65,8 +65,10 @@ router.post('/', async (req, res) => {
     // Get the created requisition
     const result = await query('SELECT * FROM requisitions WHERE id = ?', [id]);
     
-    // Send email notification
-    await emailService.sendRequisitionRequest(staff.staff_name, req.body);
+    // Send email notification - non-blocking (fire and forget)
+    emailService.sendRequisitionRequest(staff.staff_name, req.body)
+      .then(() => console.log('Requisition email sent'))
+      .catch((err: any) => console.error('Email failed (non-blocking):', err));
 
     res.status(201).json(result[0]);
   } catch (error) {
@@ -201,7 +203,9 @@ router.post('/:id/approve', async (req: any, res) => {
     `, [id]);
 
     if (result.length > 0) {
-      await emailService.sendApprovalNotification(result[0].staff_name, status, reason);
+      // Non-blocking email
+      emailService.sendApprovalNotification(result[0].staff_name, status, reason)
+        .catch((err: any) => console.error('Email failed:', err));
     }
 
     res.json({ message: `Requisition ${status}`, requisition: result[0] });
@@ -235,11 +239,12 @@ router.post('/:id/allocate', async (req: any, res) => {
     `, [id]);
 
     if (result.length > 0) {
-      await emailService.sendVehicleAllocated(
+      // Non-blocking email
+      emailService.sendVehicleAllocated(
         result[0].staff_name, 
         result[0].registration_num,
         result[0].driver_name
-      );
+      ).catch((err: any) => console.error('Email failed:', err));
     }
 
     res.json({ message: 'Vehicle allocated', requisition: result[0] });
@@ -287,11 +292,12 @@ router.post('/:id/inspection', async (req: any, res) => {
     `, [id]);
 
     if (result.length > 0) {
-      await emailService.sendInspectionNotification(
+      // Non-blocking email
+      emailService.sendInspectionNotification(
         result[0].registration_num,
         result[0].driver_name,
         passed
-      );
+      ).catch((err: any) => console.error('Email failed:', err));
     }
 
     res.json({ message: 'Inspection submitted', passed, requisition: result[0] });
@@ -337,11 +343,12 @@ router.post('/:id/close', async (req: any, res) => {
     `, [id]);
 
     if (result.length > 0) {
-      await emailService.sendTripCompleted(
+      // Non-blocking email
+      emailService.sendTripCompleted(
         result[0].staff_name,
         result[0].registration_num,
         distance
-      );
+      ).catch((err: any) => console.error('Email failed:', err));
     }
 
     res.json({ message: 'Trip closed', distance, requisition: result[0] });
