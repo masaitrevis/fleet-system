@@ -53,7 +53,7 @@ function AppContent() {
 
   const renderView = () => {
     switch (currentView) {
-      case 'dashboard': return <Dashboard apiUrl={API_URL} />;
+      case 'dashboard': return <Dashboard apiUrl={API_URL} user={user} />;
       case 'requisitions': return <RequisitionModule apiUrl={API_URL} user={user} />;
       case 'accidents': return <Accidents apiUrl={API_URL} user={user} />;
       case 'audits': return <Audits apiUrl={API_URL} user={user} />;
@@ -66,7 +66,7 @@ function AppContent() {
       case 'upload': return <Upload apiUrl={API_URL} />;
       case 'reports': return <Reports apiUrl={API_URL} />;
       case 'admin': return <Admin apiUrl={API_URL} />;
-      default: return <Dashboard apiUrl={API_URL} />;
+      default: return <Dashboard apiUrl={API_URL} user={user} />;
     }
   };
 

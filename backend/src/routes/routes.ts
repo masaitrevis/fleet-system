@@ -1,8 +1,38 @@
 import { Router } from 'express';
 import { query } from '../database';
 import { v4 as uuidv4 } from 'uuid';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
+
+// Get my routes (for drivers)
+router.get('/my-routes', authenticateToken, async (req: any, res) => {
+  try {
+    const staffId = req.user?.staffId;
+    
+    if (!staffId) {
+      return res.json([]);
+    }
+    
+    const result = await query(`
+      SELECT r.*, 
+        v.registration_num,
+        d1.staff_name as driver1_name,
+        d2.staff_name as driver2_name
+      FROM routes r
+      LEFT JOIN vehicles v ON v.id = r.vehicle_id
+      LEFT JOIN staff d1 ON d1.id = r.driver1_id
+      LEFT JOIN staff d2 ON d2.id = r.driver2_id
+      WHERE r.driver1_id = $1 OR r.driver2_id = $1 OR r.co_driver_id = $1
+      ORDER BY r.route_date DESC
+    `, [staffId]);
+    
+    res.json(result);
+  } catch (error: any) {
+    console.error('My routes error:', error);
+    res.status(500).json({ error: 'Failed to fetch my routes', details: error.message });
+  }
+});
 
 // Get all routes with details
 router.get('/', async (req, res) => {

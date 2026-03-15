@@ -6,6 +6,13 @@ import {
 
 interface DashboardProps {
   apiUrl: string;
+  user?: {
+    id?: string;
+    email?: string;
+    role?: string;
+    staffRole?: string | null;
+    staffName?: string | null;
+  } | null;
 }
 
 interface Stats {
@@ -44,12 +51,20 @@ interface Stats {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
-export default function Dashboard({ apiUrl }: DashboardProps) {
+// Role-based visibility config
+const DRIVER_HIDDEN_CARDS = ['Total Staff', 'Pending Repairs'];
+
+export default function Dashboard({ apiUrl, user }: DashboardProps) {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [myStats, setMyStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const token = localStorage.getItem('token');
+  
+  // Check if user is a driver
+  const isDriver = user?.staffRole?.toLowerCase().includes('driver') || 
+                   user?.role?.toLowerCase().includes('driver');
 
   const fetchStats = () => {
     setLoading(true);
@@ -69,9 +84,33 @@ export default function Dashboard({ apiUrl }: DashboardProps) {
       });
   };
 
+  // Fetch driver-specific stats
+  const fetchMyStats = () => {
+    if (!isDriver) return;
+    
+    fetch(`${apiUrl}/routes/my-routes`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(r => r.json())
+      .then(data => {
+        console.log('My routes:', data);
+        setMyStats({
+          totalRoutes: data?.length || 0,
+          completed: data?.filter((r: any) => r.status === 'Completed')?.length || 0,
+          pending: data?.filter((r: any) => r.status === 'Assigned')?.length || 0
+        });
+      })
+      .catch(err => {
+        console.error('Failed to fetch my stats:', err);
+      });
+  };
+
   useEffect(() => {
     fetchStats();
-  }, [apiUrl, token]);
+    if (isDriver) {
+      fetchMyStats();
+    }
+  }, [apiUrl, token, isDriver]);
 
   if (loading) return <div className="text-center py-12">Loading...</div>;
   if (!stats) return <div className="text-center py-12 text-red-600">Failed to load stats</div>;
@@ -87,17 +126,27 @@ export default function Dashboard({ apiUrl }: DashboardProps) {
     cost: parseFloat(c.total_cost || '0')
   })) || [];
 
-  const statCards = [
+  // Filter stat cards for drivers
+  let statCards = [
     { title: 'Total Vehicles', value: stats.fleet?.total_vehicles || '0', color: 'bg-blue-500', icon: '🚗' },
     { title: 'Active Vehicles', value: stats.fleet?.active_vehicles || '0', color: 'bg-green-500', icon: '✅' },
     { title: 'Under Maintenance', value: stats.fleet?.maintenance_vehicles || '0', color: 'bg-orange-500', icon: '🔧' },
     { title: 'Total Staff', value: stats.staff?.total_staff || '0', color: 'bg-purple-500', icon: '👥' },
   ];
 
+  if (isDriver) {
+    statCards = statCards.filter(card => !DRIVER_HIDDEN_CARDS.includes(card.title));
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-gray-800">Dashboard</h2>
+        <div>
+          <h2 className="text-3xl font-bold text-gray-800">
+            {isDriver ? `Welcome, ${user?.staffName || 'Driver'}` : 'Dashboard'}
+          </h2>
+          {isDriver && <p className="text-gray-500 text-sm mt-1">Driver View - Limited Access</p>}
+        </div>
         <div className="flex items-center gap-3">
           {lastUpdated && (
             <span className="text-sm text-gray-500">
@@ -113,6 +162,27 @@ export default function Dashboard({ apiUrl }: DashboardProps) {
           </button>
         </div>
       </div>
+
+      {/* Driver Summary Cards */}
+      {isDriver && myStats && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+            <div className="text-4xl mb-2">🚗</div>
+            <div className="text-3xl font-bold">{myStats.totalRoutes}</div>
+            <div className="text-white/80">My Total Routes</div>
+          </div>
+          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
+            <div className="text-4xl mb-2">✅</div>
+            <div className="text-3xl font-bold">{myStats.completed}</div>
+            <div className="text-white/80">Completed</div>
+          </div>
+          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white shadow-lg">
+            <div className="text-4xl mb-2">⏳</div>
+            <div className="text-3xl font-bold">{myStats.pending}</div>
+            <div className="text-white/80">Pending</div>
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -187,76 +257,82 @@ export default function Dashboard({ apiUrl }: DashboardProps) {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">💰 Monthly Fuel Costs</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between border-b pb-2">
-              <span className="text-gray-600">Total Cost:</span>
-              <span className="font-semibold text-red-600">${parseFloat(stats.monthlyFuel?.monthly_cost || '0').toLocaleString()}</span>
+        {!isDriver && (
+          <>
+            <div className="bg-white rounded-xl shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">💰 Monthly Fuel Costs</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between border-b pb-2">
+                  <span className="text-gray-600">Total Cost:</span>
+                  <span className="font-semibold text-red-600">${parseFloat(stats.monthlyFuel?.monthly_cost || '0').toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between border-b pb-2">
+                  <span className="text-gray-600">Total Liters:</span>
+                  <span className="font-semibold">{parseFloat(stats.monthlyFuel?.monthly_liters || '0').toLocaleString()} L</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Pending Repairs:</span>
+                  <span className="font-semibold text-orange-600">{stats.repairs?.pending_repairs || 0}</span>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between border-b pb-2">
-              <span className="text-gray-600">Total Liters:</span>
-              <span className="font-semibold">{parseFloat(stats.monthlyFuel?.monthly_liters || '0').toLocaleString()} L</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Pending Repairs:</span>
-              <span className="font-semibold text-orange-600">{stats.repairs?.pending_repairs || 0}</span>
-            </div>
-          </div>
-        </div>
 
-        <div className="bg-white rounded-xl shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">⛽ Fuel Costs by Vehicle</h3>
-          <ResponsiveContainer width="100%" height={150}>
-            <PieChart>
-              <Pie
-                data={fuelData}
-                cx="50%"
-                cy="50%"
-                innerRadius={40}
-                outerRadius={60}
-                fill="#8884d8"
-                paddingAngle={5}
-                dataKey="cost"
-              >
-                {fuelData.map((_entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Maintenance Due */}
-      <div className="bg-white rounded-xl shadow p-6 mb-8">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">⚠️ Maintenance Due Soon</h3>
-        {stats.maintenanceDue?.length > 0 ? (
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left p-3">Vehicle</th>
-                <th className="text-left p-3">Model</th>
-                <th className="text-left p-3">Current Mileage</th>
-                <th className="text-left p-3">Service Due</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.maintenanceDue.map((v, i) => (
-                <tr key={i} className="border-b">
-                  <td className="p-3 font-medium">{v.registration_num}</td>
-                  <td className="p-3">{v.make_model}</td>
-                  <td className="p-3">{v.current_mileage?.toLocaleString()} km</td>
-                  <td className="p-3 text-orange-600">{v.next_service_due}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-gray-500">✅ No maintenance due in next 30 days</p>
+            <div className="bg-white rounded-xl shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">⛽ Fuel Costs by Vehicle</h3>
+              <ResponsiveContainer width="100%" height={150}>
+                <PieChart>
+                  <Pie
+                    data={fuelData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={40}
+                    outerRadius={60}
+                    fill="#8884d8"
+                    paddingAngle={5}
+                    dataKey="cost"
+                  >
+                    {fuelData.map((_entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </>
         )}
       </div>
+
+      {/* Maintenance Due - Hidden for drivers */}
+      {!isDriver && (
+        <div className="bg-white rounded-xl shadow p-6 mb-8">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">⚠️ Maintenance Due Soon</h3>
+          {stats.maintenanceDue?.length > 0 ? (
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left p-3">Vehicle</th>
+                  <th className="text-left p-3">Model</th>
+                  <th className="text-left p-3">Current Mileage</th>
+                  <th className="text-left p-3">Service Due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.maintenanceDue.map((v, i) => (
+                  <tr key={i} className="border-b">
+                    <td className="p-3 font-medium">{v.registration_num}</td>
+                    <td className="p-3">{v.make_model}</td>
+                    <td className="p-3">{v.current_mileage?.toLocaleString()} km</td>
+                    <td className="p-3 text-orange-600">{v.next_service_due}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-gray-500">✅ No maintenance due in next 30 days</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
