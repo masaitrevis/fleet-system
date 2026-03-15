@@ -1,41 +1,49 @@
 // Role-based access control utilities
-
-export type StaffRole = 
-  | 'admin' 
-  | 'manager' 
-  | 'viewer'
-  | 'auditor'
-  | 'Driver'
-  | 'Transport Supervisor'
-  | 'Departmental Supervisor'
-  | 'Head of Department'
-  | 'Security Personnel';
+// System supports both login roles (admin/manager/viewer) and staff job roles
 
 export type SystemRole = 
   | 'admin' 
   | 'manager' 
   | 'viewer'
-  | 'auditor'
   | 'driver'
   | 'transport_supervisor'
   | 'dept_supervisor'
   | 'hod'
   | 'security';
 
-// Map staff role to system role
-export function mapStaffRole(staffRole: string): SystemRole {
+// Map any role string to system role
+export function mapRole(role: string): SystemRole {
+  const normalized = role?.toLowerCase().replace(/\s+/g, '_') || 'viewer';
+  
   const mapping: Record<string, SystemRole> = {
-    'Driver': 'driver',
-    'Transport Supervisor': 'transport_supervisor',
-    'Departmental Supervisor': 'dept_supervisor',
-    'Head of Department': 'hod',
-    'Security Personnel': 'security',
+    // Login roles
     'admin': 'admin',
     'manager': 'manager',
     'viewer': 'viewer',
-    'auditor': 'auditor'
+    // Staff job roles
+    'driver': 'driver',
+    'transport_supervisor': 'transport_supervisor',
+    'transport supervisor': 'transport_supervisor',
+    'departmental_supervisor': 'dept_supervisor',
+    'departmental supervisor': 'dept_supervisor',
+    'dept_supervisor': 'dept_supervisor',
+    'head_of_department': 'hod',
+    'head of department': 'hod',
+    'hod': 'hod',
+    'security_personnel': 'security',
+    'security personnel': 'security',
+    'security': 'security'
   };
-  return mapping[staffRole] || 'viewer';
+  
+  return mapping[normalized] || 'viewer';
+}
+
+// Get effective role from user object (handles both login and staff roles)
+export function getEffectiveRole(user: any): SystemRole {
+  if (!user) return 'viewer';
+  // Prefer staff role if available, fallback to user role
+  const roleToUse = user.staffRole || user.role || 'viewer';
+  return mapRole(roleToUse);
 }
 
 // Permission checks
@@ -99,26 +107,20 @@ export const Permissions = {
   
   // Read-only check
   isReadOnly: (role: SystemRole) => 
-    ['viewer', 'driver', 'security'].includes(role),
+    ['viewer'].includes(role),
 };
 
 // Get role display name
-export function getRoleDisplayName(role: SystemRole | StaffRole): string {
+export function getRoleDisplayName(role: SystemRole | string): string {
   const names: Record<string, string> = {
     'admin': 'Administrator',
     'manager': 'Manager',
     'viewer': 'Viewer',
-    'auditor': 'Auditor',
     'driver': 'Driver',
     'transport_supervisor': 'Transport Supervisor',
     'dept_supervisor': 'Departmental Supervisor',
     'hod': 'Head of Department',
-    'security': 'Security Personnel',
-    'Driver': 'Driver',
-    'Transport Supervisor': 'Transport Supervisor',
-    'Departmental Supervisor': 'Departmental Supervisor',
-    'Head of Department': 'Head of Department',
-    'Security Personnel': 'Security Personnel'
+    'security': 'Security Personnel'
   };
   return names[role] || role;
 }

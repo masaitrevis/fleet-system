@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Permissions, mapStaffRole, type SystemRole } from '../utils/roles';
+import { Permissions, getEffectiveRole, type SystemRole } from '../utils/roles';
 
 interface SecurityDashboardProps {
   apiUrl: string;
@@ -37,9 +37,7 @@ export default function SecurityDashboard({ apiUrl, user }: SecurityDashboardPro
   const [showModal, setShowModal] = useState<'checkout' | 'checkin' | null>(null);
 
   const token = localStorage.getItem('token');
-  const effectiveRole: SystemRole = user?.staffRole 
-    ? mapStaffRole(user.staffRole) 
-    : (user?.role as SystemRole) || 'viewer';
+  const effectiveRole: SystemRole = getEffectiveRole(user);
 
   const canManageGate = Permissions.canManageGate(effectiveRole);
 

@@ -14,6 +14,7 @@ import Accidents from './components/Accidents';
 import Audits from './components/Audits';
 import RequisitionModule from './components/requisition/RequisitionModule';
 import SecurityDashboard from './components/SecurityDashboard';
+import { getEffectiveRole } from './utils/roles';
 
 import Admin from './components/Admin';
 
@@ -47,9 +48,7 @@ function AppContent() {
     { key: 'admin', label: 'Admin', icon: '⚙️', roles: ['admin'] },
   ];
 
-  const effectiveRole = user?.staffRole 
-    ? user.staffRole.toLowerCase().replace(/\s+/g, '_').replace('head_of_department', 'hod').replace('departmental', 'dept')
-    : user?.role || 'viewer';
+  const effectiveRole = getEffectiveRole(user);
 
   const filteredNav = navItems.filter(item => item.roles.includes(effectiveRole));
 
