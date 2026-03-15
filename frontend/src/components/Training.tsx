@@ -62,15 +62,28 @@ export default function Training({ apiUrl, user }: TrainingProps) {
 
   // Enroll in course
   const handleEnroll = async (courseId: string) => {
+    if (!user?.staffId) {
+      alert('Your account is not linked to a staff profile. Contact your Transport Manager.');
+      return;
+    }
+    
     setLoading(true);
-    const res = await fetch(`${apiUrl}/training/enroll`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ staff_id: user.staffId, course_id: courseId })
-    });
-    if (res.ok) {
-      alert('Enrolled successfully!');
-      fetchEnrollments();
+    try {
+      const res = await fetch(`${apiUrl}/training/enroll`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staff_id: user.staffId, course_id: courseId })
+      });
+      
+      if (res.ok) {
+        await fetchEnrollments();
+        setView('my-training'); // Switch to My Training view so they can see it
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to enroll. You may already be enrolled in this course.');
+      }
+    } catch (error) {
+      alert('Network error. Please try again.');
     }
     setLoading(false);
   };
@@ -415,7 +428,26 @@ export default function Training({ apiUrl, user }: TrainingProps) {
                 <p className="text-xs text-gray-400 mb-4">{course.description?.substring(0, 100)}...</p>
                 
                 {enrolled ? (
-                  <button disabled className="w-full py-2 bg-green-100 text-green-700 rounded">{enrolled.status === 'passed' ? '✓ Completed' : 'Enrolled'}</button>
+                  <button 
+                    onClick={() => {
+                      if (enrolled.status === 'passed') {
+                        setView('certificates');
+                      } else {
+                        setSelectedEnrollment(enrolled);
+                        setView('my-training');
+                      }
+                    }}
+                    className={`w-full py-2 rounded ${
+                      enrolled.status === 'passed' 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-blue-100 text-blue-700'
+                    }`}
+                  >
+                    {enrolled.status === 'passed' ? '✓ Completed' : 
+                     enrolled.status === 'enrolled' ? 'Start Learning →' :
+                     enrolled.status === 'in_progress' ? 'Continue →' :
+                     enrolled.status === 'quiz_pending' ? 'Take Quiz →' : 'Enrolled'}
+                  </button>
                 ) : (
                   <button onClick={() => handleEnroll(course.id)} disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded disabled:bg-gray-400">
                     {loading ? 'Enrolling...' : 'Enroll Now'}

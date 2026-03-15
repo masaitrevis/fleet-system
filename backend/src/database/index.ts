@@ -373,6 +373,63 @@ const createTrainingTables = async () => {
       ('DRUG-001', 'Drug & Alcohol Awareness', 'Understanding drug and alcohol policies, testing procedures, and impairment recognition.', 'Compliance', 1, 12, true)
     `);
     console.log('✅ Training courses seeded');
+    
+    // Seed sample slides for courses
+    await seedSampleSlides(pool);
+  }
+};
+
+// Seed sample slides for courses
+const seedSampleSlides = async (pool: Pool) => {
+  // Check if slides already exist
+  const slideCount = await pool.query('SELECT COUNT(*) as count FROM training_slides');
+  if (parseInt(slideCount.rows[0].count) > 0) return;
+  
+  // Get courses
+  const courses = await pool.query('SELECT id, course_code FROM training_courses');
+  const courseMap: Record<string, string> = {};
+  courses.rows.forEach((c: any) => courseMap[c.course_code] = c.id);
+  
+  const sampleSlides: Record<string, Array<{title: string, content: string, duration: number}>> = {
+    'DEF-001': [
+      { title: 'Introduction to Defensive Driving', content: 'Defensive driving is a set of driving skills that allows you to defend yourself against possible collisions caused by bad drivers, drunk drivers, and poor weather.\n\nKey Principles:\n• Stay alert and focused\n• Anticipate hazards\n• Maintain safe following distance\n• Adapt to road conditions', duration: 5 },
+      { title: 'The 3-Second Rule', content: 'The 3-second rule helps you maintain a safe following distance:\n\n1. Pick a fixed point ahead (sign, tree, marking)\n2. When the vehicle ahead passes it, start counting\n3. You should reach that point after 3+ seconds\n\nIncrease to 4-5 seconds in bad weather or heavy traffic.', duration: 5 },
+      { title: 'Scanning the Road', content: 'Effective scanning pattern:\n\n• Look 12-15 seconds ahead (city: 1-1.5 blocks, highway: 1/4 mile)\n• Check mirrors every 5-8 seconds\n• Scan intersections before entering\n• Watch for escape routes\n• Check blind spots before lane changes', duration: 5 },
+      { title: 'Managing Distractions', content: 'Common distractions and how to avoid them:\n\n• Mobile phones - Use hands-free only when necessary\n• Eating/drinking - Do before or after driving\n• Passengers - Set expectations before departure\n• Navigation - Program before starting\n\nRemember: A 2-second glance at 60 km/h means 33 meters of blind travel.', duration: 5 }
+    ],
+    'HOS-001': [
+      { title: 'Hours of Service Regulations', content: 'Hours of Service (HOS) regulations are designed to prevent driver fatigue:\n\nKey Limits:\n• 11 hours maximum driving time after 10 consecutive hours off-duty\n• 14-hour on-duty window\n• 60/70 hour weekly limits\n• 30-minute break after 8 hours of driving', duration: 5 },
+      { title: 'Logbook Requirements', content: 'Your logbook must record:\n\n• Date and total miles driven\n• Truck/trailer numbers\n• Name of carrier\n• Driver signature\n• 24-hour period starting time\n• Total hours (driving, on-duty, off-duty)\n• Shipping document numbers\n\nElectronic logs (ELD) must be used when available.', duration: 5 },
+      { title: 'Fatigue Warning Signs', content: 'Recognize these warning signs of fatigue:\n\n• Frequent yawning or blinking\n• Difficulty remembering recent exits\n• Missing traffic signs\n• Drifting between lanes\n• Heavy eyelids\n\nWhen you notice these signs, find a safe place to rest immediately.', duration: 5 }
+    ],
+    'DVIR-001': [
+      { title: 'Introduction to DVIR', content: 'The Daily Vehicle Inspection Report (DVIR) is a legal requirement.\n\nPurpose:\n• Ensure vehicle safety before operation\n• Document defects found\n• Prove compliance with regulations\n• Protect you and your company\n\nYou must complete DVIR at the beginning AND end of each workday.', duration: 5 },
+      { title: 'Pre-Trip Inspection', content: 'Systematic inspection order:\n\n1. Engine compartment (fluids, belts, hoses)\n2. Front of vehicle (lights, windshield)\n3. Driver side (tires, fuel tank, mirrors)\n4. Rear (lights, cargo securement)\n5. Passenger side\n6. Inside cab (gauges, controls, documents)\n\nDocument any defects on the DVIR.', duration: 5 },
+      { title: 'Common Defects to Check', content: 'Critical items that can put vehicle out of service:\n\n• Brake defects (air leaks, worn pads)\n• Tire issues (under 2/32" tread, bulges)\n• Lighting problems (non-functional lights)\n• Steering defects (excessive play)\n• Suspension issues\n\nNever operate a vehicle with critical defects!', duration: 5 }
+    ],
+    'ACC-001': [
+      { title: 'Accident Prevention', content: 'Most accidents are preventable through:\n\n• Proper training\n• Vehicle maintenance\n• Adherence to speed limits\n• Avoiding distractions\n• Managing fatigue\n\nRemember: Speeding is a factor in 30% of fatal crashes.', duration: 5 },
+      { title: 'If an Accident Occurs', content: 'Immediate actions:\n\n1. Stop immediately and secure the scene\n2. Check for injuries and call emergency services\n3. Do not admit fault or make promises\n4. Document everything (photos, witness info)\n5. Notify your supervisor within 1 hour\n6. Complete accident report\n\nYour safety is the first priority.', duration: 5 }
+    ],
+    'DRUG-001': [
+      { title: 'Drug & Alcohol Policy', content: 'Our zero-tolerance policy prohibits:\n\n• Alcohol within 8 hours of duty\n• Any illegal drug use\n• Misuse of prescription medications\n• Refusing a drug/alcohol test\n\nViolations result in immediate suspension and possible termination.', duration: 5 },
+      { title: 'Recognizing Impairment', content: 'Signs of impairment in yourself or others:\n\n• Slurred speech\n• Unsteady balance\n• Bloodshot eyes\n• Unusual behavior\n• Delayed reactions\n\nIf you suspect impairment, do not drive. Contact your supervisor immediately.', duration: 5 }
+    ]
+  };
+  
+  // Insert slides for courses that have them defined
+  for (const [courseCode, slides] of Object.entries(sampleSlides)) {
+    const courseId = courseMap[courseCode];
+    if (!courseId) continue;
+    
+    for (let i = 0; i < slides.length; i++) {
+      const slide = slides[i];
+      await pool.query(`
+        INSERT INTO training_slides (id, course_id, slide_order, title, content, duration_minutes)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [uuidv4(), courseId, i + 1, slide.title, slide.content, slide.duration]);
+    }
+    console.log(`✅ Added ${slides.length} slides for ${courseCode}`);
   }
 };
 

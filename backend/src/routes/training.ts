@@ -240,7 +240,21 @@ router.post('/enroll', async (req: any, res) => {
   const { staff_id, course_id } = req.body;
   const enrolled_by = req.user?.staffId;
   
+  if (!staff_id) {
+    return res.status(400).json({ error: 'Staff ID required. User account may not be linked to a staff profile.' });
+  }
+  
   try {
+    // Check if already enrolled
+    const existing = await query(
+      'SELECT id FROM training_enrollments WHERE staff_id = $1 AND course_id = $2',
+      [staff_id, course_id]
+    );
+    
+    if (existing.length > 0) {
+      return res.status(409).json({ error: 'Already enrolled in this course' });
+    }
+    
     // Count slides
     const slideCount = await query(
       'SELECT COUNT(*) as count FROM training_slides WHERE course_id = $1',
