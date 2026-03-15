@@ -19,6 +19,7 @@ interface Vehicle {
 export default function Fleet({ apiUrl }: FleetProps) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     registration_num: '',
@@ -35,44 +36,83 @@ export default function Fleet({ apiUrl }: FleetProps) {
     fetchVehicles();
   }, [apiUrl]);
 
-  const fetchVehicles = () => {
-    fetch(`${apiUrl}/vehicles`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        setVehicles(data);
-        setLoading(false);
+  const fetchVehicles = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${apiUrl}/vehicles`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (!res.ok) throw new Error('Failed to fetch vehicles');
+      const data = await res.json();
+      setVehicles(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Fleet fetch error:', err);
+      setError(err.message || 'Failed to load vehicles');
+      setVehicles([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch(`${apiUrl}/vehicles`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        ...formData,
-        year_of_manufacture: parseInt(formData.year_of_manufacture),
-        target_consumption_rate: parseFloat(formData.target_consumption_rate)
-      })
-    });
-    setShowForm(false);
-    fetchVehicles();
+    setError('');
+    
+    try {
+      const res = await fetch(`${apiUrl}/vehicles`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          registration_num: formData.registration_num,
+          make_model: formData.make_model,
+          year_of_manufacture: parseInt(formData.year_of_manufacture) || new Date().getFullYear(),
+          ownership: formData.ownership,
+          department: formData.department,
+          target_consumption_rate: parseFloat(formData.target_consumption_rate) || 8.0
+        })
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to add vehicle');
+      }
+      
+      setShowForm(false);
+      setFormData({
+        registration_num: '',
+        make_model: '',
+        year_of_manufacture: '',
+        ownership: 'Company',
+        department: '',
+        target_consumption_rate: '8.0'
+      });
+      fetchVehicles();
+    } catch (err: any) {
+      console.error('Vehicle submit error:', err);
+      setError(err.message || 'Failed to add vehicle');
+    }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Active': return 'bg-green-100 text-green-800';
       case 'Under Maintenance': return 'bg-orange-100 text-orange-800';
+      case 'Retired': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading && vehicles.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading fleet...</div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -82,9 +122,13 @@ export default function Fleet({ apiUrl }: FleetProps) {
           onClick={() => setShowForm(!showForm)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
         >
-          + Add Vehicle
+          {showForm ? 'Cancel' : '+ Add Vehicle'}
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">{error}</div>
+      )}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow mb-6">
@@ -134,8 +178,8 @@ export default function Fleet({ apiUrl }: FleetProps) {
             />
           </div>
           <div className="mt-4 flex gap-2">
-            <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">Save</button>
-            <button type="button" onClick={() => setShowForm(false)} className="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+            <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save</button>
+            <button type="button" onClick={() => setShowForm(false)} className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">Cancel</button>
           </div>
         </form>
       )}
@@ -154,21 +198,27 @@ export default function Fleet({ apiUrl }: FleetProps) {
             </tr>
           </thead>
           <tbody>
-            {vehicles?.map(v => (
-              <tr key={v.id} className="border-b hover:bg-gray-50">
-                <td className="p-4 font-medium">{v.registration_num}</td>
-                <td className="p-4">{v.make_model || '-'}</td>
-                <td className="p-4">{v.year_of_manufacture || '-'}</td>
-                <td className="p-4">{v.department || '-'}</td>
-                <td className="p-4">
-                  <span className={`px-2 py-1 rounded text-sm ${getStatusColor(v.status)}`}>
-                    {v.status}
-                  </span>
-                </td>
-                <td className="p-4">{v.current_mileage?.toLocaleString()} km</td>
-                <td className="p-4">{v.target_consumption_rate}</td>
+            {vehicles?.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="p-8 text-center text-gray-500">No vehicles found</td>
               </tr>
-            ))}
+            ) : (
+              vehicles?.map(v => (
+                <tr key={v.id} className="border-b hover:bg-gray-50">
+                  <td className="p-4 font-medium">{v.registration_num || '-'}</td>
+                  <td className="p-4">{v.make_model || '-'}</td>
+                  <td className="p-4">{v.year_of_manufacture || '-'}</td>
+                  <td className="p-4">{v.department || '-'}</td>
+                  <td className="p-4">
+                    <span className={`px-2 py-1 rounded text-sm ${getStatusColor(v.status)}`}>
+                      {v.status || 'Unknown'}
+                    </span>
+                  </td>
+                  <td className="p-4">{v.current_mileage ? v.current_mileage.toLocaleString() + ' km' : '-'}</td>
+                  <td className="p-4">{v.target_consumption_rate || '-'}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

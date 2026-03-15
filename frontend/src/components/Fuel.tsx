@@ -27,6 +27,7 @@ export default function Fuel({ apiUrl }: FuelProps) {
   const [records, setRecords] = useState<FuelRecord[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     fuel_date: new Date().toISOString().split('T')[0],
@@ -47,77 +48,105 @@ export default function Fuel({ apiUrl }: FuelProps) {
     fetchVehicles();
   }, [apiUrl]);
 
-  const fetchRecords = () => {
-    fetch(`${apiUrl}/fuel`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setRecords(data);
-        } else {
-          console.error('Fuel data not an array:', data);
-          setRecords([]);
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to fetch fuel records:', err);
-        setRecords([]);
-        setLoading(false);
+  const fetchRecords = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${apiUrl}/fuel`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (!res.ok) throw new Error('Failed to fetch fuel records');
+      const data = await res.json();
+      setRecords(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Fuel fetch error:', err);
+      setError(err.message || 'Failed to load fuel records');
+      setRecords([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const fetchVehicles = () => {
-    fetch(`${apiUrl}/vehicles`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setVehicles(data);
-        } else {
-          console.error('Vehicles data not an array:', data);
-          setVehicles([]);
-        }
-      })
-      .catch(err => {
-        console.error('Failed to fetch vehicles:', err);
-        setVehicles([]);
+  const fetchVehicles = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/vehicles`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (!res.ok) throw new Error('Failed to fetch vehicles');
+      const data = await res.json();
+      setVehicles(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Vehicles fetch error:', err);
+      setVehicles([]);
+    }
   };
 
   const handleVehicleChange = (vehicleId: string) => {
-    const vehicle = vehicles.find(v => v.id === vehicleId);
-    setFormData({
-      ...formData,
+    const vehicle = vehicles?.find(v => v.id === vehicleId);
+    setFormData(prev => ({
+      ...prev,
       vehicle_id: vehicleId,
       past_mileage: vehicle?.current_mileage?.toString() || ''
-    });
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch(`${apiUrl}/fuel`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        ...formData,
-        past_mileage: parseInt(formData.past_mileage),
-        current_mileage: parseInt(formData.current_mileage),
-        quantity_liters: parseFloat(formData.quantity_liters),
-        amount: parseFloat(formData.amount)
-      })
-    });
-    setShowForm(false);
-    fetchRecords();
-    fetchVehicles();
+    setError('');
+    
+    try {
+      const res = await fetch(`${apiUrl}/fuel`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          fuel_date: formData.fuel_date,
+          vehicle_id: formData.vehicle_id,
+          card_num: formData.card_num,
+          card_name: formData.card_name,
+          past_mileage: parseInt(formData.past_mileage) || 0,
+          current_mileage: parseInt(formData.current_mileage) || 0,
+          quantity_liters: parseFloat(formData.quantity_liters) || 0,
+          amount: parseFloat(formData.amount) || 0,
+          place: formData.place
+        })
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save fuel record');
+      }
+      
+      setShowForm(false);
+      // Reset form
+      setFormData({
+        fuel_date: new Date().toISOString().split('T')[0],
+        vehicle_id: '',
+        card_num: '',
+        card_name: '',
+        past_mileage: '',
+        current_mileage: '',
+        quantity_liters: '',
+        amount: '',
+        place: ''
+      });
+      fetchRecords();
+      fetchVehicles();
+    } catch (err: any) {
+      console.error('Fuel submit error:', err);
+      setError(err.message || 'Failed to save fuel record');
+    }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading && records.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading fuel records...</div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -127,37 +156,128 @@ export default function Fuel({ apiUrl }: FuelProps) {
           onClick={() => setShowForm(!showForm)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
         >
-          + Add Fuel Record
+          {showForm ? 'Cancel' : '+ Add Fuel Record'}
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
+          {error}
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <input type="date" value={formData.fuel_date} onChange={e => setFormData({...formData, fuel_date: e.target.value})} className="border p-2 rounded" required />
+            <div>
+              <label className="block text-sm font-medium mb-1">Date *</label>
+              <input 
+                type="date" 
+                value={formData.fuel_date} 
+                onChange={e => setFormData({...formData, fuel_date: e.target.value})} 
+                className="border p-2 rounded w-full" 
+                required 
+              />
+            </div>
             
-            <select value={formData.vehicle_id} onChange={e => handleVehicleChange(e.target.value)} className="border p-2 rounded" required>
-              <option value="">Select Vehicle</option>
-              {vehicles?.map(v => <option key={v.id} value={v.id}>{v.registration_num}</option>)}
-            </select>
+            <div>
+              <label className="block text-sm font-medium mb-1">Vehicle *</label>
+              <select 
+                value={formData.vehicle_id} 
+                onChange={e => handleVehicleChange(e.target.value)} 
+                className="border p-2 rounded w-full" 
+                required
+              >
+                <option value="">Select Vehicle</option>
+                {vehicles?.map(v => (
+                  <option key={v.id} value={v.id}>{v.registration_num}</option>
+                ))}
+              </select>
+            </div>
             
-            <input placeholder="Card Number" value={formData.card_num} onChange={e => setFormData({...formData, card_num: e.target.value})} className="border p-2 rounded" />
+            <div>
+              <label className="block text-sm font-medium mb-1">Card Number</label>
+              <input 
+                placeholder="Card Number" 
+                value={formData.card_num} 
+                onChange={e => setFormData({...formData, card_num: e.target.value})} 
+                className="border p-2 rounded w-full" 
+              />
+            </div>
             
-            <input placeholder="Card Name" value={formData.card_name} onChange={e => setFormData({...formData, card_name: e.target.value})} className="border p-2 rounded" />
+            <div>
+              <label className="block text-sm font-medium mb-1">Card Name</label>
+              <input 
+                placeholder="Card Name" 
+                value={formData.card_name} 
+                onChange={e => setFormData({...formData, card_name: e.target.value})} 
+                className="border p-2 rounded w-full" 
+              />
+            </div>
             
-            <input placeholder="Past Mileage" type="number" value={formData.past_mileage} onChange={e => setFormData({...formData, past_mileage: e.target.value})} className="border p-2 rounded" required />
+            <div>
+              <label className="block text-sm font-medium mb-1">Past Mileage *</label>
+              <input 
+                placeholder="Past Mileage" 
+                type="number" 
+                value={formData.past_mileage} 
+                onChange={e => setFormData({...formData, past_mileage: e.target.value})} 
+                className="border p-2 rounded w-full" 
+                required 
+              />
+            </div>
             
-            <input placeholder="Current Mileage" type="number" value={formData.current_mileage} onChange={e => setFormData({...formData, current_mileage: e.target.value})} className="border p-2 rounded" required />
+            <div>
+              <label className="block text-sm font-medium mb-1">Current Mileage *</label>
+              <input 
+                placeholder="Current Mileage" 
+                type="number" 
+                value={formData.current_mileage} 
+                onChange={e => setFormData({...formData, current_mileage: e.target.value})} 
+                className="border p-2 rounded w-full" 
+                required 
+              />
+            </div>
             
-            <input placeholder="Quantity (Liters)" type="number" step="0.01" value={formData.quantity_liters} onChange={e => setFormData({...formData, quantity_liters: e.target.value})} className="border p-2 rounded" required />
+            <div>
+              <label className="block text-sm font-medium mb-1">Quantity (Liters) *</label>
+              <input 
+                placeholder="Quantity (Liters)" 
+                type="number" 
+                step="0.01" 
+                value={formData.quantity_liters} 
+                onChange={e => setFormData({...formData, quantity_liters: e.target.value})} 
+                className="border p-2 rounded w-full" 
+                required 
+              />
+            </div>
             
-            <input placeholder="Amount ($)" type="number" step="0.01" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="border p-2 rounded" required />
+            <div>
+              <label className="block text-sm font-medium mb-1">Amount ($) *</label>
+              <input 
+                placeholder="Amount ($)" 
+                type="number" 
+                step="0.01" 
+                value={formData.amount} 
+                onChange={e => setFormData({...formData, amount: e.target.value})} 
+                className="border p-2 rounded w-full" 
+                required 
+              />
+            </div>
             
-            <input placeholder="Station/Place" value={formData.place} onChange={e => setFormData({...formData, place: e.target.value})} className="border p-2 rounded" />
+            <div>
+              <label className="block text-sm font-medium mb-1">Station/Place</label>
+              <input 
+                placeholder="Station/Place" 
+                value={formData.place} 
+                onChange={e => setFormData({...formData, place: e.target.value})} 
+                className="border p-2 rounded w-full" 
+              />
+            </div>
           </div>
           <div className="mt-4 flex gap-2">
-            <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">Save</button>
-            <button type="button" onClick={() => setShowForm(false)} className="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+            <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save</button>
+            <button type="button" onClick={() => setShowForm(false)} className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">Cancel</button>
           </div>
         </form>
       )}
@@ -176,17 +296,25 @@ export default function Fuel({ apiUrl }: FuelProps) {
             </tr>
           </thead>
           <tbody>
-            {records?.map(r => (
-              <tr key={r.id} className="border-b hover:bg-gray-50">
-                <td className="p-4">{r.fuel_date}</td>
-                <td className="p-4 font-medium">{r.registration_num}</td>
-                <td className="p-4">{r.distance_km?.toLocaleString()}</td>
-                <td className="p-4">{r.quantity_liters}</td>
-                <td className="p-4">{r.km_per_liter?.toFixed(2)}</td>
-                <td className="p-4">${r.amount?.toFixed(2)}</td>
-                <td className="p-4">{r.place}</td>
+            {records?.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="p-8 text-center text-gray-500">
+                  No fuel records found
+                </td>
               </tr>
-            ))}
+            ) : (
+              records?.map(r => (
+                <tr key={r.id} className="border-b hover:bg-gray-50">
+                  <td className="p-4">{r.fuel_date || '-'}</td>
+                  <td className="p-4 font-medium">{r.registration_num || '-'}</td>
+                  <td className="p-4">{r.distance_km?.toLocaleString() || '-'}</td>
+                  <td className="p-4">{r.quantity_liters || '-'}</td>
+                  <td className="p-4">{r.km_per_liter?.toFixed(2) || '-'}</td>
+                  <td className="p-4">${r.amount ? r.amount.toFixed(2) : '-'}</td>
+                  <td className="p-4">{r.place || '-'}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

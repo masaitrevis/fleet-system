@@ -19,6 +19,7 @@ interface StaffMember {
 export default function Staff({ apiUrl }: StaffProps) {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -38,44 +39,63 @@ export default function Staff({ apiUrl }: StaffProps) {
     fetchStaff();
   }, [apiUrl]);
 
-  const fetchStaff = () => {
-    fetch(`${apiUrl}/staff`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        setStaff(data);
-        setLoading(false);
+  const fetchStaff = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${apiUrl}/staff`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (!res.ok) throw new Error('Failed to fetch staff');
+      const data = await res.json();
+      setStaff(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Staff fetch error:', err);
+      setError(err.message || 'Failed to load staff');
+      setStaff([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     
-    const url = editingId 
-      ? `${apiUrl}/staff/${editingId}` 
-      : `${apiUrl}/staff`;
-    const method = editingId ? 'PUT' : 'POST';
-    
-    await fetch(url, {
-      method,
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(formData)
-    });
-    
-    setShowForm(false);
-    setEditingId(null);
-    resetForm();
-    fetchStaff();
+    try {
+      const url = editingId 
+        ? `${apiUrl}/staff/${editingId}` 
+        : `${apiUrl}/staff`;
+      const method = editingId ? 'PUT' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(formData)
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save staff');
+      }
+      
+      setShowForm(false);
+      setEditingId(null);
+      resetForm();
+      fetchStaff();
+    } catch (err: any) {
+      console.error('Staff submit error:', err);
+      setError(err.message || 'Failed to save staff');
+    }
   };
 
   const handleEdit = (member: StaffMember) => {
     setFormData({
-      staff_no: member.staff_no,
-      staff_name: member.staff_name,
+      staff_no: member.staff_no || '',
+      staff_name: member.staff_name || '',
       email: member.email || '',
       phone: member.phone || '',
       designation: member.designation || '',
@@ -106,7 +126,13 @@ export default function Staff({ apiUrl }: StaffProps) {
     resetForm();
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading && staff.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading staff...</div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -123,6 +149,10 @@ export default function Staff({ apiUrl }: StaffProps) {
           {showForm ? 'Cancel' : '+ Add Staff'}
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">{error}</div>
+      )}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow mb-6">
@@ -243,39 +273,41 @@ export default function Staff({ apiUrl }: StaffProps) {
             </tr>
           </thead>
           <tbody>
-            {staff.map(s => (
-              <tr key={s.id} className="border-b hover:bg-gray-50">
-                <td className="p-4 font-medium">{s.staff_no}</td>
-                <td className="p-4">{s.staff_name}</td>
-                <td className="p-4">
-                  {s.email ? (
-                    <span>{s.email}</span>
-                  ) : (
-                    <span className="text-red-500 text-sm">⚠️ Missing</span>
-                  )}
-                </td>
-                <td className="p-4">{s.phone || '-'}</td>
-                <td className="p-4">{s.department || '-'}</td>
-                <td className="p-4">
-                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">{s.role}</span>
-                </td>
-                <td className="p-4">
-                  <button 
-                    onClick={() => handleEdit(s)}
-                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                  >
-                    Edit
-                  </button>
-                </td>
+            {staff?.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="p-8 text-center text-gray-500">No staff members found</td>
               </tr>
-            ))}
+            ) : (
+              staff?.map(s => (
+                <tr key={s.id} className="border-b hover:bg-gray-50">
+                  <td className="p-4 font-medium">{s.staff_no || '-'}</td>
+                  <td className="p-4">{s.staff_name || '-'}</td>
+                  <td className="p-4">
+                    {s.email ? (
+                      <span>{s.email}</span>
+                    ) : (
+                      <span className="text-red-500 text-sm">⚠️ Missing</span>
+                    )}
+                  </td>
+                  <td className="p-4">{s.phone || '-'}</td>
+                  <td className="p-4">{s.department || '-'}</td>
+                  <td className="p-4">
+                    <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">{s.role || 'Driver'}</span>
+                  </td>
+                  <td className="p-4">
+                    <button 
+                      onClick={() => handleEdit(s)}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
-      
-      {staff.length === 0 && (
-        <p className="text-center py-8 text-gray-500">No staff members found. Click "Add Staff" to create one.</p>
-      )}
     </div>
   );
 }

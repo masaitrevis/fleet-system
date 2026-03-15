@@ -187,7 +187,7 @@ export default function Routes({ apiUrl }: RoutesProps) {
                 className="border p-2 rounded w-full"
               >
                 <option value="">Select Driver</option>
-                {drivers.map(d => <option key={d.id} value={d.id}>{d.staff_name}</option>)}
+                {drivers?.map(d => <option key={d.id} value={d.id}>{d.staff_name}</option>)}
               </select>
             </div>
             

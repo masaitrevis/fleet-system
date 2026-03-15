@@ -25,6 +25,7 @@ export default function Repairs({ apiUrl }: RepairsProps) {
   const [repairs, setRepairs] = useState<Repair[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     date_in: new Date().toISOString().split('T')[0],
@@ -45,62 +46,105 @@ export default function Repairs({ apiUrl }: RepairsProps) {
     fetchVehicles();
   }, [apiUrl]);
 
-  const fetchRepairs = () => {
-    fetch(`${apiUrl}/repairs`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        setRepairs(data);
-        setLoading(false);
+  const fetchRepairs = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${apiUrl}/repairs`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (!res.ok) throw new Error('Failed to fetch repairs');
+      const data = await res.json();
+      setRepairs(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Repairs fetch error:', err);
+      setError(err.message || 'Failed to load repairs');
+      setRepairs([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const fetchVehicles = () => {
-    fetch(`${apiUrl}/vehicles`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(r => r.json())
-      .then(data => setVehicles(data));
+  const fetchVehicles = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/vehicles`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch vehicles');
+      const data = await res.json();
+      setVehicles(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Vehicles fetch error:', err);
+      setVehicles([]);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch(`${apiUrl}/repairs`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        ...formData,
-        odometer_reading: parseInt(formData.odometer_reading),
-        target_repair_hours: parseFloat(formData.target_repair_hours),
-        cost: parseFloat(formData.cost)
-      })
-    });
-    setShowForm(false);
-    fetchRepairs();
-    fetchVehicles();
+    setError('');
+    
+    try {
+      const res = await fetch(`${apiUrl}/repairs`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...formData,
+          odometer_reading: parseInt(formData.odometer_reading) || 0,
+          target_repair_hours: parseFloat(formData.target_repair_hours) || 0,
+          cost: parseFloat(formData.cost) || 0
+        })
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save repair');
+      }
+      
+      setShowForm(false);
+      setFormData({
+        date_in: new Date().toISOString().split('T')[0],
+        vehicle_id: '',
+        preventative_maintenance: '',
+        breakdown_description: '',
+        odometer_reading: '',
+        assigned_technician: '',
+        target_repair_hours: '',
+        garage_name: '',
+        cost: ''
+      });
+      fetchRepairs();
+    } catch (err: any) {
+      console.error('Repair submit error:', err);
+      setError(err.message || 'Failed to save repair');
+    }
   };
 
   const completeRepair = async (id: string) => {
     const hours = prompt('Enter actual repair hours:');
     if (!hours) return;
     
-    await fetch(`${apiUrl}/repairs/${id}/complete`, {
-      method: 'PUT',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        date_out: new Date().toISOString().split('T')[0],
-        repairs_end_time: new Date().toISOString(),
-        actual_repair_hours: parseFloat(hours)
-      })
-    });
-    fetchRepairs();
+    try {
+      const res = await fetch(`${apiUrl}/repairs/${id}/complete`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          date_out: new Date().toISOString().split('T')[0],
+          repairs_end_time: new Date().toISOString(),
+          actual_repair_hours: parseFloat(hours) || 0
+        })
+      });
+      
+      if (!res.ok) throw new Error('Failed to complete repair');
+      fetchRepairs();
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -111,7 +155,13 @@ export default function Repairs({ apiUrl }: RepairsProps) {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading && repairs.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading repairs...</div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -121,9 +171,13 @@ export default function Repairs({ apiUrl }: RepairsProps) {
           onClick={() => setShowForm(!showForm)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
         >
-          + New Repair
+          {showForm ? 'Cancel' : '+ New Repair'}
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">{error}</div>
+      )}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow mb-6">
@@ -163,8 +217,8 @@ export default function Repairs({ apiUrl }: RepairsProps) {
           />
           
           <div className="mt-4 flex gap-2">
-            <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">Save</button>
-            <button type="button" onClick={() => setShowForm(false)} className="bg-gray-300 px-4 py-2 rounded">Cancel</button>
+            <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save</button>
+            <button type="button" onClick={() => setShowForm(false)} className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">Cancel</button>
           </div>
         </form>
       )}
@@ -184,31 +238,37 @@ export default function Repairs({ apiUrl }: RepairsProps) {
             </tr>
           </thead>
           <tbody>
-            {repairs?.map(r => (
-              <tr key={r.id} className="border-b hover:bg-gray-50">
-                <td className="p-4">{r.date_in}</td>
-                <td className="p-4 font-medium">{r.registration_num}</td>
-                <td className="p-4 max-w-xs truncate">{r.breakdown_description || 'Preventative Maintenance'}</td>
-                <td className="p-4">{r.odometer_reading?.toLocaleString()}</td>
-                <td className="p-4">{r.assigned_technician || '-'}</td>
-                <td className="p-4">${r.cost?.toFixed(2)}</td>
-                <td className="p-4">
-                  <span className={`px-2 py-1 rounded text-sm ${getStatusColor(r.status)}`}>
-                    {r.status}
-                  </span>
-                </td>
-                <td className="p-4">
-                  {r.status !== 'Completed' && (
-                    <button 
-                      onClick={() => completeRepair(r.id)}
-                      className="bg-green-600 text-white px-3 py-1 rounded text-sm"
-                    >
-                      Complete
-                    </button>
-                  )}
-                </td>
+            {repairs?.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="p-8 text-center text-gray-500">No repair records found</td>
               </tr>
-            ))}
+            ) : (
+              repairs?.map(r => (
+                <tr key={r.id} className="border-b hover:bg-gray-50">
+                  <td className="p-4">{r.date_in || '-'}</td>
+                  <td className="p-4 font-medium">{r.registration_num || '-'}</td>
+                  <td className="p-4 max-w-xs truncate">{r.breakdown_description || 'Preventative Maintenance'}</td>
+                  <td className="p-4">{r.odometer_reading?.toLocaleString() || '-'}</td>
+                  <td className="p-4">{r.assigned_technician || '-'}</td>
+                  <td className="p-4">${r.cost ? r.cost.toFixed(2) : '-'}</td>
+                  <td className="p-4">
+                    <span className={`px-2 py-1 rounded text-sm ${getStatusColor(r.status)}`}>
+                      {r.status || 'Pending'}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    {r.status !== 'Completed' && (
+                      <button 
+                        onClick={() => completeRepair(r.id)}
+                        className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                      >
+                        Complete
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
