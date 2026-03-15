@@ -83,7 +83,7 @@ export default function SecurityDashboard({ apiUrl, user }: SecurityDashboardPro
   };
 
   const handleCheckout = async () => {
-    if (!selectedTrip || !odometerReading) return;
+    if (!selectedTrip) return;
     
     try {
       const res = await fetch(`${apiUrl}/requisitions/${selectedTrip.id}/security-checkout`, {
@@ -92,13 +92,15 @@ export default function SecurityDashboard({ apiUrl, user }: SecurityDashboardPro
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ starting_odometer: parseInt(odometerReading) })
+        body: JSON.stringify({})  // No odometer needed - already recorded during inspection
       });
       
-      if (!res.ok) throw new Error('Checkout failed');
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Checkout failed');
+      }
       
       setShowModal(null);
-      setOdometerReading('');
       setSelectedTrip(null);
       fetchReadyVehicles();
     } catch (err: any) {
@@ -263,18 +265,18 @@ export default function SecurityDashboard({ apiUrl, user }: SecurityDashboardPro
             <p className="text-gray-600 mb-4">
               {selectedTrip.registration_num} - {selectedTrip.driver_name}
             </p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Starting Odometer Reading (km)
-              </label>
-              <input
-                type="number"
-                value={odometerReading}
-                onChange={(e) => setOdometerReading(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-                placeholder="e.g. 45230"
-              />
-            </div>
+            
+            {selectedTrip.starting_odometer ? (
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-gray-600">Starting Odometer (Recorded during inspection)</p>
+                <p className="text-lg font-semibold">{selectedTrip.starting_odometer.toLocaleString()} km</p>
+              </div>
+            ) : (
+              <div className="mb-4 p-3 bg-yellow-50 rounded-lg text-yellow-800">
+                ⚠️ Starting odometer not recorded. Inspection must be completed first.
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={() => setShowModal(null)}
@@ -284,7 +286,7 @@ export default function SecurityDashboard({ apiUrl, user }: SecurityDashboardPro
               </button>
               <button
                 onClick={handleCheckout}
-                disabled={!odometerReading}
+                disabled={!selectedTrip.starting_odometer}
                 className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400"
               >
                 Confirm Check Out

@@ -43,6 +43,7 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
     battery_ok: true, wipers_ok: true, mirrors_ok: true, seatbelts_ok: true, fuel_ok: true,
   });
   const [inspectionDefects, setInspectionDefects] = useState('');
+  const [startingOdometer, setStartingOdometer] = useState('');  // NEW: Starting odometer input
   const [rating, setRating] = useState(5);
   const [ratingComment, setRatingComment] = useState('');
   const [error, setError] = useState('');
@@ -248,6 +249,11 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
   const handleSubmitInspection = async () => {
     if (!inspectingTrip) return;
     
+    if (!startingOdometer || parseInt(startingOdometer) <= 0) {
+      alert('Please enter a valid starting odometer reading');
+      return;
+    }
+    
     const allPassed = Object.values(inspectionChecks).every(v => v);
     
     try {
@@ -261,7 +267,8 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
           ...inspectionChecks,
           defects_found: inspectionDefects,
           defect_photos: [],
-          passed: allPassed && !inspectionDefects.trim()
+          passed: allPassed && !inspectionDefects.trim(),
+          starting_odometer: parseInt(startingOdometer)  // NEW: Include starting odometer
         })
       });
       
@@ -272,6 +279,7 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
           battery_ok: true, wipers_ok: true, mirrors_ok: true, seatbelts_ok: true, fuel_ok: true,
         });
         setInspectionDefects('');
+        setStartingOdometer('');  // NEW: Reset odometer
         loadAssignments();
       }
     } catch (err) {
@@ -667,6 +675,25 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
               {inspectingTrip.registration_num} - {inspectingTrip.place_of_departure} → {inspectingTrip.destination}
             </p>
             
+            {/* NEW: Starting Odometer Input */}
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Starting Odometer Reading (km) *
+              </label>
+              <input
+                type="number"
+                value={startingOdometer}
+                onChange={(e) => setStartingOdometer(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2"
+                placeholder="e.g. 45230"
+                min="0"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Record the odometer before departure
+              </p>
+            </div>
+            
             <div className="space-y-2 mb-4">
               {Object.entries(inspectionChecks).map(([key, value]) => (
                 <label key={key} className="flex items-center justify-between p-2 bg-gray-50 rounded cursor-pointer">
@@ -694,14 +721,15 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
             
             <div className="flex gap-3">
               <button
-                onClick={() => { setInspectingTrip(null); setInspectionDefects(''); }}
+                onClick={() => { setInspectingTrip(null); setInspectionDefects(''); setStartingOdometer(''); }}
                 className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmitInspection}
-                className="flex-1 bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 text-sm"
+                disabled={!startingOdometer || parseInt(startingOdometer) <= 0}
+                className="flex-1 bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 text-sm disabled:bg-gray-400"
               >
                 Submit Inspection
               </button>

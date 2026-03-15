@@ -30,7 +30,7 @@ router.post('/', async (req, res) => {
 
   try {
     // Check if staff has email
-    const staffCheck = await query('SELECT staff_name, email, department FROM staff WHERE id = ?', [requested_by]);
+    const staffCheck = await query('SELECT staff_name, email, department FROM staff WHERE id = $1', [requested_by]);
     if (!staffCheck || staffCheck.length === 0) {
       return res.status(400).json({ error: 'Staff not found' });
     }
@@ -55,7 +55,7 @@ router.post('/', async (req, res) => {
         id, request_no, requested_by, place_of_departure, destination, purpose,
         travel_date, travel_time, return_date, return_time, num_passengers, passenger_names,
         status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending', CURRENT_TIMESTAMP)
     `, [
       id, requestNo, requested_by, place_of_departure, destination, purpose,
       travel_date, travel_time, return_date || null, return_time || null,
@@ -63,7 +63,7 @@ router.post('/', async (req, res) => {
     ]);
 
     // Get the created requisition
-    const result = await query('SELECT * FROM requisitions WHERE id = ?', [id]);
+    const result = await query('SELECT * FROM requisitions WHERE id = $1', [id]);
     
     // Send email notification - non-blocking (fire and forget)
     emailService.sendRequisitionRequest(staff.staff_name, req.body)
@@ -112,7 +112,7 @@ router.get('/my-requests', async (req: any, res) => {
         JOIN staff s ON r.requested_by = s.id
         LEFT JOIN staff d ON r.driver_id = d.id
         LEFT JOIN vehicles v ON r.vehicle_id = v.id
-        WHERE r.requested_by = ?
+        WHERE r.requested_by = $1
         ORDER BY r.created_at DESC
       `, [staffId]);
     }
@@ -142,7 +142,7 @@ router.get('/', async (req: any, res) => {
     let params: any[] = [];
     
     if (status) {
-      queryStr += ` WHERE r.status = ?`;
+      queryStr += ` WHERE r.status = $1`;
       params.push(status);
     }
     
@@ -181,7 +181,7 @@ router.get('/pending-approvals', async (req: any, res) => {
         SELECT r.*, s.staff_name, s.email, s.department
         FROM requisitions r
         JOIN staff s ON r.requested_by = s.id
-        WHERE r.status = 'pending' AND s.department = ?
+        WHERE r.status = 'pending' AND s.department = $1
         ORDER BY r.created_at DESC
       `, [userDept]);
     }
@@ -227,7 +227,7 @@ router.get('/my-assignments', async (req: any, res) => {
       FROM requisitions r
       JOIN staff s ON r.requested_by = s.id
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      WHERE r.driver_id = ?
+      WHERE r.driver_id = $1
       ORDER BY r.travel_date DESC
     `, [staffId]);
     
@@ -253,7 +253,7 @@ router.post('/:id/approve', async (req: any, res) => {
 
   try {
     // First check if requisition exists and is pending
-    const checkResult = await query('SELECT * FROM requisitions WHERE id = ?', [id]);
+    const checkResult = await query('SELECT * FROM requisitions WHERE id = $1', [id]);
     if (checkResult.length === 0) {
       return res.status(404).json({ error: 'Requisition not found' });
     }
@@ -262,14 +262,13 @@ router.post('/:id/approve', async (req: any, res) => {
       return res.status(400).json({ error: 'Requisition is not pending' });
     }
 
-    // Use staffId if available (for staff users), otherwise use userId (for admin/manager without staff record)
-    // Note: approved_by references staff(id), so if manager has no staff record, we use NULL
+    // Use staffId if available (for staff users), otherwise use NULL
     const approverId = staffId || null;
 
     await query(`
       UPDATE requisitions 
-      SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP, approval_reason = ?
-      WHERE id = ?
+      SET status = $1, approved_by = $2, approved_at = CURRENT_TIMESTAMP, approval_reason = $3
+      WHERE id = $4
     `, [status, approverId, reason || '', id]);
 
     // Get requisition details for notification
@@ -277,7 +276,7 @@ router.post('/:id/approve', async (req: any, res) => {
       SELECT r.*, s.staff_name 
       FROM requisitions r
       JOIN staff s ON r.requested_by = s.id
-      WHERE r.id = ?
+      WHERE r.id = $1
     `, [id]);
 
     if (result.length > 0) {
@@ -311,8 +310,8 @@ router.post('/:id/allocate', async (req: any, res) => {
     
     await query(`
       UPDATE requisitions 
-      SET vehicle_id = ?, driver_id = ?, allocated_by = ?, allocated_at = CURRENT_TIMESTAMP, status = 'allocated'
-      WHERE id = ?
+      SET vehicle_id = $1, driver_id = $2, allocated_by = $3, allocated_at = CURRENT_TIMESTAMP, status = 'allocated'
+      WHERE id = $4
     `, [vehicle_id, driver_id, allocatedBy, id]);
 
     // Get details for notification
@@ -322,7 +321,7 @@ router.post('/:id/allocate', async (req: any, res) => {
       JOIN staff s ON r.requested_by = s.id
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.id = ?
+      WHERE r.id = $1
     `, [id]);
 
     if (result.length > 0) {
@@ -340,31 +339,34 @@ router.post('/:id/allocate', async (req: any, res) => {
   }
 });
 
-// Submit driver inspection
+// Submit driver inspection - NOW INCLUDES STARTING ODOMETER
 router.post('/:id/inspection', async (req: any, res) => {
   const { id } = req.params;
   const { 
     tires_ok, brakes_ok, lights_ok, oil_ok, coolant_ok,
     battery_ok, wipers_ok, mirrors_ok, seatbelts_ok, fuel_ok,
-    defects_found, defect_photos, passed
+    defects_found, defect_photos, passed,
+    starting_odometer  // NEW: Starting odometer recorded at end of inspection
   } = req.body;
 
   try {
     await query(`
       UPDATE requisitions 
       SET 
-        inspection_tires = ?, inspection_brakes = ?, inspection_lights = ?,
-        inspection_oil = ?, inspection_coolant = ?, inspection_battery = ?,
-        inspection_wipers = ?, inspection_mirrors = ?, inspection_seatbelts = ?,
-        inspection_fuel = ?, defects_found = ?, defect_photos = ?,
-        inspection_passed = ?, inspection_completed_at = CURRENT_TIMESTAMP,
-        status = ?
-      WHERE id = ?
+        inspection_tires = $1, inspection_brakes = $2, inspection_lights = $3,
+        inspection_oil = $4, inspection_coolant = $5, inspection_battery = $6,
+        inspection_wipers = $7, inspection_mirrors = $8, inspection_seatbelts = $9,
+        inspection_fuel = $10, defects_found = $11, defect_photos = $12,
+        inspection_passed = $13, inspection_completed_at = CURRENT_TIMESTAMP,
+        starting_odometer = $14,
+        status = $15
+      WHERE id = $16
     `, [
       tires_ok, brakes_ok, lights_ok, oil_ok, coolant_ok,
       battery_ok, wipers_ok, mirrors_ok, seatbelts_ok, fuel_ok,
       defects_found || '', JSON.stringify(defect_photos || []),
-      passed, passed ? 'ready_for_departure' : 'inspection_failed',
+      passed, starting_odometer || null,
+      passed ? 'ready_for_departure' : 'inspection_failed',
       id
     ]);
 
@@ -374,7 +376,7 @@ router.post('/:id/inspection', async (req: any, res) => {
       FROM requisitions r
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.id = ?
+      WHERE r.id = $1
     `, [id]);
 
     if (result.length > 0) {
@@ -410,7 +412,7 @@ router.post('/:id/close', async (req: any, res) => {
 
   try {
     // Get starting odometer
-    const reqData = await query('SELECT * FROM requisitions WHERE id = ?', [id]);
+    const reqData = await query('SELECT * FROM requisitions WHERE id = $1', [id]);
     if (reqData.length === 0) {
       return res.status(404).json({ error: 'Requisition not found' });
     }
@@ -420,12 +422,12 @@ router.post('/:id/close', async (req: any, res) => {
     await query(`
       UPDATE requisitions 
       SET 
-        ending_odometer = ?, 
-        distance_km = ?,
-        closed_by = ?,
+        ending_odometer = $1, 
+        distance_km = $2,
+        closed_by = $3,
         closed_at = CURRENT_TIMESTAMP,
         status = 'completed'
-      WHERE id = ?
+      WHERE id = $4
     `, [ending_odometer, distance, closedBy, id]);
 
     // Get details for notification
@@ -434,7 +436,7 @@ router.post('/:id/close', async (req: any, res) => {
       FROM requisitions r
       JOIN staff s ON r.requested_by = s.id
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      WHERE r.id = ?
+      WHERE r.id = $1
     `, [id]);
 
     if (result.length > 0) {
@@ -461,8 +463,8 @@ router.post('/:id/rate', async (req: any, res) => {
   try {
     await query(`
       UPDATE requisitions 
-      SET driver_rating = ?, driver_rating_comment = ?, rated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+      SET driver_rating = $1, driver_rating_comment = $2, rated_at = CURRENT_TIMESTAMP
+      WHERE id = $3
     `, [rating, comment || '', id]);
 
     res.json({ message: 'Driver rated' });
@@ -480,7 +482,7 @@ router.post('/:id/retry-inspection', async (req: any, res) => {
   
   try {
     // Verify trip is in inspection_failed status
-    const checkResult = await query('SELECT * FROM requisitions WHERE id = ? AND status = ?', [id, 'inspection_failed']);
+    const checkResult = await query('SELECT * FROM requisitions WHERE id = $1 AND status = $2', [id, 'inspection_failed']);
     if (checkResult.length === 0) {
       return res.status(400).json({ error: 'Trip not in inspection_failed status' });
     }
@@ -502,8 +504,9 @@ router.post('/:id/retry-inspection', async (req: any, res) => {
         inspection_wipers = null,
         inspection_mirrors = null,
         inspection_seatbelts = null,
-        inspection_fuel = null
-      WHERE id = ?
+        inspection_fuel = null,
+        starting_odometer = null
+      WHERE id = $1
     `, [id]);
 
     res.json({ message: 'Inspection reset - ready for retry' });
@@ -525,7 +528,7 @@ router.post('/:id/reallocate', async (req: any, res) => {
 
   try {
     // Verify trip is in inspection_failed status
-    const checkResult = await query('SELECT * FROM requisitions WHERE id = ? AND status = ?', [id, 'inspection_failed']);
+    const checkResult = await query('SELECT * FROM requisitions WHERE id = $1 AND status = $2', [id, 'inspection_failed']);
     if (checkResult.length === 0) {
       return res.status(400).json({ error: 'Trip not in inspection_failed status' });
     }
@@ -536,9 +539,9 @@ router.post('/:id/reallocate', async (req: any, res) => {
     await query(`
       UPDATE requisitions 
       SET 
-        vehicle_id = ?,
-        driver_id = ?,
-        allocated_by = ?,
+        vehicle_id = $1,
+        driver_id = $2,
+        allocated_by = $3,
         allocated_at = CURRENT_TIMESTAMP,
         status = 'allocated',
         inspection_passed = null,
@@ -553,8 +556,9 @@ router.post('/:id/reallocate', async (req: any, res) => {
         inspection_wipers = null,
         inspection_mirrors = null,
         inspection_seatbelts = null,
-        inspection_fuel = null
-      WHERE id = ?
+        inspection_fuel = null,
+        starting_odometer = null
+      WHERE id = $4
     `, [vehicle_id, driver_id, allocatedBy, id]);
 
     // Get updated details
@@ -563,7 +567,7 @@ router.post('/:id/reallocate', async (req: any, res) => {
       FROM requisitions r
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.id = ?
+      WHERE r.id = $1
     `, [id]);
 
     res.json({ message: 'Vehicle reallocated', requisition: result[0] });
@@ -624,28 +628,38 @@ router.get('/security/active-trips', async (req, res) => {
   }
 });
 
-// Security check-out (vehicle leaving)
+// Security check-out (vehicle leaving) - NO STARTING ODOMETER, just verify and check out
 router.post('/:id/security-checkout', async (req: any, res) => {
   const { id } = req.params;
-  const { starting_odometer } = req.body;
   const securityId = req.user?.userId;
 
-  if (!starting_odometer) {
-    return res.status(400).json({ error: 'Starting odometer reading required' });
-  }
-
   try {
-    // Update requisition
+    // Verify the trip has been inspected and has starting odometer recorded
+    const tripCheck = await query('SELECT * FROM requisitions WHERE id = $1', [id]);
+    if (tripCheck.length === 0) {
+      return res.status(404).json({ error: 'Requisition not found' });
+    }
+
+    const trip = tripCheck[0];
+    
+    if (!trip.inspection_passed) {
+      return res.status(400).json({ error: 'Vehicle has not passed inspection' });
+    }
+    
+    if (!trip.starting_odometer) {
+      return res.status(400).json({ error: 'Starting odometer not recorded. Complete inspection first.' });
+    }
+
+    // Update requisition - Security just verifies and checks out
     await query(`
       UPDATE requisitions 
       SET 
-        starting_odometer = ?,
-        security_cleared_by = ?,
+        security_cleared_by = $1,
         security_cleared_at = CURRENT_TIMESTAMP,
         departed_at = CURRENT_TIMESTAMP,
         status = 'departed'
-      WHERE id = ?
-    `, [starting_odometer, securityId, id]);
+      WHERE id = $2
+    `, [securityId, id]);
 
     // Get details for response
     const result = await query(`
@@ -657,7 +671,7 @@ router.post('/:id/security-checkout', async (req: any, res) => {
       JOIN staff s ON r.requested_by = s.id
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.id = ?
+      WHERE r.id = $1
     `, [id]);
 
     if (result.length === 0) {
@@ -668,7 +682,7 @@ router.post('/:id/security-checkout', async (req: any, res) => {
     await query(`
       UPDATE vehicles 
       SET status = 'On Trip', updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+      WHERE id = $1
     `, [result[0].vehicle_id]);
 
     res.json({ 
@@ -694,40 +708,32 @@ router.post('/:id/security-checkin', async (req: any, res) => {
 
   try {
     // Get trip details first
-    const tripData = await query('SELECT * FROM requisitions WHERE id = ?', [id]);
+    const tripData = await query('SELECT * FROM requisitions WHERE id = $1', [id]);
     if (tripData.length === 0) {
       return res.status(404).json({ error: 'Requisition not found' });
     }
 
-    const trip = tripData[0];
-    const distance = ending_odometer - (trip.starting_odometer || 0);
-    
-    // Calculate trip duration in minutes
-    const departedAt = new Date(trip.departed_at);
-    const returnedAt = new Date();
-    const durationMinutes = Math.round((returnedAt.getTime() - departedAt.getTime()) / (1000 * 60));
+    const distance = ending_odometer - (tripData[0].starting_odometer || 0);
 
-    // Update requisition
     await query(`
       UPDATE requisitions 
       SET 
-        ending_odometer = ?,
-        distance_km = ?,
-        trip_duration_minutes = ?,
+        ending_odometer = $1,
+        distance_km = $2,
+        return_notes = $3,
         returned_at = CURRENT_TIMESTAMP,
-        security_notes = ?,
         status = 'returned'
-      WHERE id = ?
-    `, [ending_odometer, distance, durationMinutes, notes || '', id]);
+      WHERE id = $4
+    `, [ending_odometer, distance, notes || '', id]);
 
-    // Update vehicle status back to 'Active' and mileage
+    // Update vehicle status back to Active
     await query(`
       UPDATE vehicles 
-      SET status = 'Active', current_mileage = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [ending_odometer, trip.vehicle_id]);
+      SET status = 'Active', current_mileage = current_mileage + $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [distance, tripData[0].vehicle_id]);
 
-    // Get full details for response
+    // Get details for response
     const result = await query(`
       SELECT r.*, 
         s.staff_name as requester_name,
@@ -737,61 +743,18 @@ router.post('/:id/security-checkin', async (req: any, res) => {
       JOIN staff s ON r.requested_by = s.id
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.id = ?
+      WHERE r.id = $1
     `, [id]);
 
     res.json({ 
       message: 'Vehicle checked in successfully', 
       trip: result[0],
-      distance_km: distance,
-      duration_minutes: durationMinutes,
-      returned_at: returnedAt.toISOString()
+      distance,
+      returned_at: new Date().toISOString()
     });
   } catch (error) {
     console.error('Security checkin error:', error);
     res.status(500).json({ error: 'Failed to check in vehicle' });
-  }
-});
-
-// Get driver's trip history with productivity metrics
-router.get('/driver/:driverId/trip-history', async (req, res) => {
-  const { driverId } = req.params;
-  
-  try {
-    const result = await query(`
-      SELECT r.*, 
-        s.staff_name as requester_name,
-        v.registration_num,
-        (r.trip_duration_minutes / 60.0) as duration_hours
-      FROM requisitions r
-      JOIN staff s ON r.requested_by = s.id
-      LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      WHERE r.driver_id = ? AND r.status = 'returned'
-      ORDER BY r.returned_at DESC
-    `, [driverId]);
-    
-    // Calculate productivity metrics
-    const totalTrips = result.length;
-    const totalDurationMinutes = result.reduce((sum: number, trip: any) => 
-      sum + (trip.trip_duration_minutes || 0), 0);
-    const totalDistance = result.reduce((sum: number, trip: any) => 
-      sum + (trip.distance_km || 0), 0);
-    const avgTripDuration = totalTrips > 0 ? totalDurationMinutes / totalTrips : 0;
-    
-    res.json({
-      trips: result,
-      summary: {
-        total_trips: totalTrips,
-        total_duration_hours: (totalDurationMinutes / 60).toFixed(2),
-        total_distance_km: totalDistance.toFixed(2),
-        avg_trip_duration_minutes: avgTripDuration.toFixed(0),
-        avg_speed_kmh: totalDurationMinutes > 0 ? 
-          ((totalDistance / totalDurationMinutes) * 60).toFixed(2) : 0
-      }
-    });
-  } catch (error) {
-    console.error('Get driver trip history error:', error);
-    res.status(500).json({ error: 'Failed to fetch trip history' });
   }
 });
 
