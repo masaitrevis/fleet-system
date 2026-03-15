@@ -276,9 +276,19 @@ router.post('/:id/approve', async (req: any, res) => {
 router.post('/:id/allocate', async (req: any, res) => {
   const { id } = req.params;
   const { vehicle_id, driver_id } = req.body;
-  const allocatedBy = req.user?.userId;
+  const userId = req.user?.userId;
+  const staffId = req.user?.staffId;
+  
+  console.log('Allocate request:', { id, vehicle_id, driver_id, userId, staffId });
+
+  if (!vehicle_id || !driver_id) {
+    return res.status(400).json({ error: 'Vehicle and driver are required' });
+  }
 
   try {
+    // Use staffId if available, otherwise NULL
+    const allocatedBy = staffId || null;
+    
     await query(`
       UPDATE requisitions 
       SET vehicle_id = ?, driver_id = ?, allocated_by = ?, allocated_at = CURRENT_TIMESTAMP, status = 'allocated'
@@ -296,7 +306,6 @@ router.post('/:id/allocate', async (req: any, res) => {
     `, [id]);
 
     if (result.length > 0) {
-      // Non-blocking email
       emailService.sendVehicleAllocated(
         result[0].staff_name, 
         result[0].registration_num,
@@ -305,9 +314,9 @@ router.post('/:id/allocate', async (req: any, res) => {
     }
 
     res.json({ message: 'Vehicle allocated', requisition: result[0] });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Allocate vehicle error:', error);
-    res.status(500).json({ error: 'Failed to allocate vehicle' });
+    res.status(500).json({ error: 'Failed to allocate vehicle: ' + (error.message || 'Unknown error') });
   }
 });
 

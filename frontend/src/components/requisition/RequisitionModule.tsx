@@ -536,22 +536,34 @@ function AllocationCard({ req, apiUrl, token, onAllocate }: {
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [selectedDriver, setSelectedDriver] = useState('');
   const [showAllocate, setShowAllocate] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const loadVehiclesAndDrivers = async () => {
+    setError('');
     try {
       const [vRes, dRes] = await Promise.all([
         fetch(`${apiUrl}/vehicles?status=Active`, { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch(`${apiUrl}/staff?role=Driver`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
       if (vRes.ok) setVehicles(await vRes.json());
+      else setError('Failed to load vehicles');
       if (dRes.ok) setDrivers(await dRes.json());
+      else setError('Failed to load drivers');
     } catch (err) {
       console.error('Failed to load vehicles/drivers:', err);
+      setError('Network error loading data');
     }
   };
 
   const handleAllocate = async () => {
-    if (!selectedVehicle || !selectedDriver) return;
+    if (!selectedVehicle || !selectedDriver) {
+      setError('Please select both vehicle and driver');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
     
     try {
       const res = await fetch(`${apiUrl}/requisitions/${req.id}/allocate`, {
@@ -562,11 +574,18 @@ function AllocationCard({ req, apiUrl, token, onAllocate }: {
         },
         body: JSON.stringify({ vehicle_id: selectedVehicle, driver_id: selectedDriver })
       });
+      
       if (res.ok) {
         onAllocate();
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Failed to allocate');
       }
     } catch (err) {
       console.error('Allocate error:', err);
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -591,6 +610,9 @@ function AllocationCard({ req, apiUrl, token, onAllocate }: {
       
       {showAllocate && (
         <div className="mt-4 space-y-3 border-t pt-4">
+          {error && (
+            <div className="bg-red-50 text-red-600 p-2 rounded text-sm">{error}</div>
+          )}
           <div>
             <label className="block text-sm font-medium mb-1">Select Vehicle</label>
             <select
@@ -623,15 +645,16 @@ function AllocationCard({ req, apiUrl, token, onAllocate }: {
             <button
               onClick={() => setShowAllocate(false)}
               className="px-3 py-1 border rounded text-sm"
+              disabled={loading}
             >
               Cancel
             </button>
             <button
               onClick={handleAllocate}
-              disabled={!selectedVehicle || !selectedDriver}
+              disabled={!selectedVehicle || !selectedDriver || loading}
               className="px-3 py-1 bg-green-600 text-white rounded text-sm disabled:bg-gray-400"
             >
-              Confirm Allocation
+              {loading ? 'Allocating...' : 'Confirm Allocation'}
             </button>
           </div>
         </div>
