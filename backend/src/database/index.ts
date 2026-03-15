@@ -570,6 +570,125 @@ const createAuditTables = async () => {
     }
     
     console.log('✅ Audit templates seeded (G4S Fleet Standard, DVIR)');
+  } else {
+    // Templates exist but may have no questions - check and seed if needed
+    await seedQuestionsIfMissing(pool);
+  }
+};
+
+// Seed questions for existing templates that have none
+const seedQuestionsIfMissing = async (pool: Pool) => {
+  // Check G4S template
+  const g4sResult = await pool.query(
+    "SELECT id FROM audit_templates WHERE template_name = $1",
+    ['G4S Fleet Standard Audit']
+  );
+  
+  if (g4sResult.rows.length > 0) {
+    const g4sId = g4sResult.rows[0].id;
+    const questionCount = await pool.query(
+      'SELECT COUNT(*) as count FROM audit_questions WHERE template_id = $1',
+      [g4sId]
+    );
+    
+    if (parseInt(questionCount.rows[0].count) === 0) {
+      // G4S template has no questions - seed them
+      const g4sQuestions = [
+        { module: 'Fleet Governance & Policy', text: 'Fleet policy is available and approved', order: 1, evidence: true },
+        { module: 'Fleet Governance & Policy', text: 'Vehicle usage policy is defined and communicated', order: 2, evidence: true },
+        { module: 'Fleet Governance & Policy', text: 'Driver authorization procedures are in place', order: 3, evidence: false },
+        { module: 'Fleet Governance & Policy', text: 'Fuel management policy exists', order: 4, evidence: true },
+        { module: 'Fleet Governance & Policy', text: 'Accident reporting procedures are documented', order: 5, evidence: true },
+        { module: 'Fleet Governance & Policy', text: 'Preventive maintenance policy is enforced', order: 6, evidence: true },
+        { module: 'Vehicle Compliance & Licensing', text: 'All vehicles have valid registration', order: 7, evidence: true },
+        { module: 'Vehicle Compliance & Licensing', text: 'Insurance is valid for all vehicles', order: 8, evidence: true },
+        { module: 'Vehicle Compliance & Licensing', text: 'Road licenses are current', order: 9, evidence: true },
+        { module: 'Vehicle Compliance & Licensing', text: 'Inspection certificates are up to date', order: 10, evidence: true },
+        { module: 'Vehicle Compliance & Licensing', text: 'Speed governors are installed and functional', order: 11, evidence: true },
+        { module: 'Vehicle Compliance & Licensing', text: 'Vehicle tracking system is operational', order: 12, evidence: true },
+        { module: 'Vehicle Compliance & Licensing', text: 'NTSA compliance is maintained (Kenya)', order: 13, evidence: true },
+        { module: 'Preventive Maintenance', text: 'Preventive maintenance schedule is available', order: 14, evidence: true },
+        { module: 'Preventive Maintenance', text: 'Service intervals are being followed', order: 15, evidence: true },
+        { module: 'Preventive Maintenance', text: 'Maintenance records are updated', order: 16, evidence: true },
+        { module: 'Preventive Maintenance', text: 'Breakdown frequency is monitored', order: 17, evidence: false },
+        { module: 'Preventive Maintenance', text: 'Spare parts control system exists', order: 18, evidence: false },
+        { module: 'Preventive Maintenance', text: 'Workshop quality control is in place', order: 19, evidence: false },
+        { module: 'Driver Management & Safety', text: 'All drivers have valid licenses', order: 20, evidence: true },
+        { module: 'Driver Management & Safety', text: 'Driver training records are maintained', order: 21, evidence: true },
+        { module: 'Driver Management & Safety', text: 'Defensive driving certification is current', order: 22, evidence: true },
+        { module: 'Driver Management & Safety', text: 'Driver working hours are monitored', order: 23, evidence: false },
+        { module: 'Driver Management & Safety', text: 'Accident history is tracked per driver', order: 24, evidence: false },
+        { module: 'Driver Management & Safety', text: 'Driver disciplinary records are maintained', order: 25, evidence: false },
+        { module: 'Fuel Management', text: 'Fuel monitoring system is installed', order: 26, evidence: true },
+        { module: 'Fuel Management', text: 'Fuel consumption is tracked per vehicle', order: 27, evidence: true },
+        { module: 'Fuel Management', text: 'Fuel variance is controlled', order: 28, evidence: true },
+        { module: 'Fuel Management', text: 'Fuel card management system exists', order: 29, evidence: false },
+        { module: 'Fuel Management', text: 'Fuel theft controls are in place', order: 30, evidence: false },
+        { module: 'Fleet Utilization', text: 'Vehicle usage is tracked', order: 31, evidence: true },
+        { module: 'Fleet Utilization', text: 'Idle time is monitored', order: 32, evidence: false },
+        { module: 'Fleet Utilization', text: 'Trip authorization system exists', order: 33, evidence: true },
+        { module: 'Fleet Utilization', text: 'Route planning is optimized', order: 34, evidence: false },
+        { module: 'Fleet Utilization', text: 'Vehicle downtime is tracked', order: 35, evidence: true },
+        { module: 'Cost Control', text: 'Total cost of ownership is tracked', order: 36, evidence: true },
+        { module: 'Cost Control', text: 'Maintenance costs are monitored', order: 37, evidence: true },
+        { module: 'Cost Control', text: 'Fuel costs are monitored', order: 38, evidence: true },
+        { module: 'Cost Control', text: 'Lease vs ownership analysis is performed', order: 39, evidence: false },
+        { module: 'Cost Control', text: 'Cost per km is analyzed', order: 40, evidence: true },
+        { module: 'Incident & Risk Management', text: 'Accident reporting system is functional', order: 41, evidence: true },
+        { module: 'Incident & Risk Management', text: 'Incident investigations are conducted', order: 42, evidence: true },
+        { module: 'Incident & Risk Management', text: 'Root cause analysis is performed', order: 43, evidence: true },
+        { module: 'Incident & Risk Management', text: 'Corrective actions are tracked', order: 44, evidence: true },
+        { module: 'Incident & Risk Management', text: 'Insurance claims are managed properly', order: 45, evidence: false }
+      ];
+      
+      for (const q of g4sQuestions) {
+        await pool.query(`
+          INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, [uuidv4(), g4sId, q.module, q.text, q.order, q.evidence]);
+      }
+      console.log('✅ G4S Fleet Standard questions seeded (45 questions)');
+    }
+  }
+  
+  // Check DVIR template
+  const dvirResult = await pool.query(
+    "SELECT id FROM audit_templates WHERE template_name = $1",
+    ['Daily Vehicle Inspection (DVIR)']
+  );
+  
+  if (dvirResult.rows.length > 0) {
+    const dvirId = dvirResult.rows[0].id;
+    const questionCount = await pool.query(
+      'SELECT COUNT(*) as count FROM audit_questions WHERE template_id = $1',
+      [dvirId]
+    );
+    
+    if (parseInt(questionCount.rows[0].count) === 0) {
+      const dvirQuestions = [
+        { module: 'Brakes', text: 'Service brakes functioning properly', order: 1 },
+        { module: 'Brakes', text: 'Parking brake holds vehicle', order: 2 },
+        { module: 'Steering', text: 'Steering mechanism operates smoothly', order: 3 },
+        { module: 'Tires', text: 'Tires properly inflated and have adequate tread', order: 4 },
+        { module: 'Wheels', text: 'Wheels and rims undamaged', order: 5 },
+        { module: 'Lights', text: 'All lights working (headlights, brake lights, turn signals)', order: 6 },
+        { module: 'Mirrors', text: 'Mirrors clean and properly adjusted', order: 7 },
+        { module: 'Windshield', text: 'Windshield clean and free of cracks', order: 8 },
+        { module: 'Wipers', text: 'Wiper blades in good condition', order: 9 },
+        { module: 'Horn', text: 'Horn functioning', order: 10 },
+        { module: 'Emergency', text: 'Emergency equipment present (fire extinguisher, triangles, first aid)', order: 11 },
+        { module: 'Fluid Levels', text: 'Oil, coolant, and other fluid levels adequate', order: 12 },
+        { module: 'Documentation', text: 'Registration and insurance documents present', order: 13 }
+      ];
+      
+      for (const q of dvirQuestions) {
+        await pool.query(`
+          INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, [uuidv4(), dvirId, q.module, q.text, q.order, true]);
+      }
+      console.log('✅ DVIR questions seeded (13 questions)');
+    }
   }
 };
 
