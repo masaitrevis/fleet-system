@@ -86,6 +86,8 @@ const createTables = async () => {
       current_mileage INTEGER DEFAULT 0,
       last_service_date DATE,
       next_service_due DATE,
+      defect_notes TEXT,
+      defect_reported_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -155,6 +157,38 @@ const createTables = async () => {
       garage_name VARCHAR(255),
       cost DECIMAL(10,2),
       status VARCHAR(50) DEFAULT 'Pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Job Cards table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS job_cards (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      job_card_number VARCHAR(50) UNIQUE NOT NULL,
+      vehicle_id UUID REFERENCES vehicles(id),
+      defect_description TEXT NOT NULL,
+      repair_type VARCHAR(100),
+      service_provider VARCHAR(100),
+      priority VARCHAR(20) DEFAULT 'Medium',
+      estimated_cost DECIMAL(10,2),
+      actual_cost DECIMAL(10,2),
+      target_hours DECIMAL(5,2),
+      actual_hours DECIMAL(5,2),
+      reported_by UUID REFERENCES staff(id),
+      reported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      approved_by UUID REFERENCES staff(id),
+      approved_at TIMESTAMP,
+      assigned_technician UUID REFERENCES staff(id),
+      started_at TIMESTAMP,
+      completed_at TIMESTAMP,
+      repair_notes TEXT,
+      cancellation_reason TEXT,
+      status VARCHAR(50) DEFAULT 'Pending',
+      source_type VARCHAR(50),
+      source_id UUID,
+      converted_to_repair_id UUID REFERENCES repairs(id),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -278,6 +312,8 @@ const createTrainingTables = async () => {
       content TEXT NOT NULL,
       media_url VARCHAR(500),
       duration_minutes INTEGER DEFAULT 5,
+      ai_notes TEXT,
+      ai_notes_generated_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -337,6 +373,20 @@ const createTrainingTables = async () => {
       passed BOOLEAN DEFAULT false,
       answers JSONB DEFAULT '{}',
       UNIQUE(enrollment_id, attempt_number)
+    )
+  `);
+  
+  // Quiz attempt details for tracking used questions
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS training_quiz_attempt_details (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      attempt_id UUID REFERENCES training_quiz_attempts(id) ON DELETE CASCADE,
+      enrollment_id UUID REFERENCES training_enrollments(id) ON DELETE CASCADE,
+      question_id UUID REFERENCES training_quiz_questions(id) ON DELETE CASCADE,
+      selected_answer CHAR(1),
+      is_correct BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(attempt_id, question_id)
     )
   `);
   

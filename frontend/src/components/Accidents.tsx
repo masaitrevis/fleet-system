@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ErrorBoundary from './ErrorBoundary';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -556,105 +557,107 @@ export default function Accidents({ apiUrl, user }: AccidentsProps) {
 
   // List View (Default)
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap justify-between items-center gap-4">
-        <h2 className="text-2xl font-bold">🚨 Accident Management</h2>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setView('analytics')}
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
-          >
-            📊 Analytics
-          </button>
-          {(user?.role === 'admin' || user?.role === 'manager') && (
+    <ErrorBoundary>
+      <div className="space-y-6">
+        <div className="flex flex-wrap justify-between items-center gap-4">
+          <h2 className="text-2xl font-bold">🚨 Accident Management</h2>
+          <div className="flex gap-3">
             <button
-              onClick={() => setView('form')}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+              onClick={() => setView('analytics')}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
             >
-              + Report Accident
+              📊 Analytics
             </button>
-          )}
+            {(user?.role === 'admin' || user?.role === 'manager') && (
+              <button
+                onClick={() => setView('form')}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+              >
+                + Report Accident
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex gap-4">
+          <select
+            value={filter.status}
+            onChange={e => { setFilter({...filter, status: e.target.value}); fetchAccidents(); }}
+            className="border p-2 rounded"
+          >
+            <option value="">All Statuses</option>
+            <option>Reported</option>
+            <option>Under Investigation</option>
+            <option>Root Cause Identified</option>
+            <option>CAPA In Progress</option>
+            <option>Closed</option>
+          </select>
+          <select
+            value={filter.severity}
+            onChange={e => { setFilter({...filter, severity: e.target.value}); fetchAccidents(); }}
+            className="border p-2 rounded"
+          >
+            <option value="">All Severities</option>
+            <option>Minor</option>
+            <option>Major</option>
+            <option>Fatal</option>
+          </select>
+        </div>
+
+        {/* Table */}
+        <div className="bg-white rounded-xl shadow overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left p-4">Case #</th>
+                <th className="text-left p-4">Date</th>
+                <th className="text-left p-4">Vehicle</th>
+                <th className="text-left p-4">Driver</th>
+                <th className="text-left p-4">Type</th>
+                <th className="text-left p-4">Severity</th>
+                <th className="text-left p-4">Status</th>
+                <th className="text-left p-4">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={8} className="p-8 text-center">Loading...</td></tr>
+              ) : accidents.length === 0 ? (
+                <tr><td colSpan={8} className="p-8 text-center text-gray-500">No accidents reported</td></tr>
+              ) : (
+                accidents?.map(accident => (
+                  <tr key={accident.id} className="border-b hover:bg-gray-50">
+                    <td className="p-4 font-medium">{accident.case_number}</td>
+                    <td className="p-4">{new Date(accident.accident_date).toLocaleDateString()}</td>
+                    <td className="p-4">{accident.registration_num}</td>
+                    <td className="p-4">{accident.driver_name}</td>
+                    <td className="p-4">{accident.accident_type}</td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded text-xs ${getSeverityColor(accident.severity)}`}>
+                        {accident.severity}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded text-xs ${getStatusColor(accident.status)}`}>
+                        {accident.status}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <button
+                        onClick={() => fetchAccidentDetails(accident.id)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        View Details →
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
-
-      {/* Filters */}
-      <div className="flex gap-4">
-        <select
-          value={filter.status}
-          onChange={e => { setFilter({...filter, status: e.target.value}); fetchAccidents(); }}
-          className="border p-2 rounded"
-        >
-          <option value="">All Statuses</option>
-          <option>Reported</option>
-          <option>Under Investigation</option>
-          <option>Root Cause Identified</option>
-          <option>CAPA In Progress</option>
-          <option>Closed</option>
-        </select>
-        <select
-          value={filter.severity}
-          onChange={e => { setFilter({...filter, severity: e.target.value}); fetchAccidents(); }}
-          className="border p-2 rounded"
-        >
-          <option value="">All Severities</option>
-          <option>Minor</option>
-          <option>Major</option>
-          <option>Fatal</option>
-        </select>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left p-4">Case #</th>
-              <th className="text-left p-4">Date</th>
-              <th className="text-left p-4">Vehicle</th>
-              <th className="text-left p-4">Driver</th>
-              <th className="text-left p-4">Type</th>
-              <th className="text-left p-4">Severity</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-left p-4">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={8} className="p-8 text-center">Loading...</td></tr>
-            ) : accidents.length === 0 ? (
-              <tr><td colSpan={8} className="p-8 text-center text-gray-500">No accidents reported</td></tr>
-            ) : (
-              accidents?.map(accident => (
-                <tr key={accident.id} className="border-b hover:bg-gray-50">
-                  <td className="p-4 font-medium">{accident.case_number}</td>
-                  <td className="p-4">{new Date(accident.accident_date).toLocaleDateString()}</td>
-                  <td className="p-4">{accident.registration_num}</td>
-                  <td className="p-4">{accident.driver_name}</td>
-                  <td className="p-4">{accident.accident_type}</td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-xs ${getSeverityColor(accident.severity)}`}>
-                      {accident.severity}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-xs ${getStatusColor(accident.status)}`}>
-                      {accident.status}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <button
-                      onClick={() => fetchAccidentDetails(accident.id)}
-                      className="text-blue-600 hover:underline"
-                    >
-                      View Details →
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </ErrorBoundary>
   );
 }

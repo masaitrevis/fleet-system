@@ -86,6 +86,52 @@ router.get('/driver-kpis', async (req, res) => {
   }
 });
 
+// Get driver summary (for driver dashboard)
+router.get('/driver-summary', async (req: any, res) => {
+  const staffId = req.user?.staffId;
+  
+  if (!staffId) {
+    return res.status(400).json({ error: 'No staff ID found' });
+  }
+  
+  try {
+    // Get trips completed
+    const tripsResult = await query(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN status = 'Assigned' THEN 1 ELSE 0 END) as pending,
+        COALESCE(SUM(actual_km), 0) as total_distance,
+        COALESCE(AVG(actual_km / NULLIF(actual_fuel, 0)), 0) as fuel_efficiency
+      FROM routes 
+      WHERE driver1_id = $1
+    `, [staffId]);
+    
+    // Get incidents count
+    const incidentsResult = await query(`
+      SELECT COUNT(*) as count 
+      FROM accidents 
+      WHERE driver_id = $1 AND accident_date >= CURRENT_DATE - INTERVAL '1 year'
+    `, [staffId]);
+    
+    // Calculate safety score
+    const accidentCount = parseInt(incidentsResult[0]?.count || 0);
+    const safetyScore = Math.max(0, 100 - (accidentCount * 15));
+    
+    res.json({
+      trips_completed: parseInt(tripsResult[0]?.completed || 0),
+      trips_pending: parseInt(tripsResult[0]?.pending || 0),
+      safety_score: safetyScore,
+      fuel_efficiency: parseFloat(tripsResult[0]?.fuel_efficiency || 0),
+      incidents: accidentCount,
+      total_distance: parseFloat(tripsResult[0]?.total_distance || 0)
+    });
+  } catch (error: any) {
+    console.error('Driver summary error:', error);
+    res.status(500).json({ error: 'Failed to fetch driver summary' });
+  }
+});
+
 // Get maintenance productivity
 router.get('/maintenance-productivity', async (req, res) => {
   try {
@@ -134,6 +180,323 @@ router.get('/fleet-summary', async (req, res) => {
     console.error('Fleet summary error:', error);
     res.status(500).json({ error: 'Failed to fetch fleet summary' });
   }
+});
+
+// ========== AI ANALYTICS GENERATOR ==========
+
+// AI Analytics query endpoint
+router.post('/ai-query', async (req: any, res) => {
+  const { query: userQuery, chart_type = 'auto' } = req.body;
+  
+  if (!userQuery) {
+    return res.status(400).json({ error: 'Query is required' });
+  }
+  
+  try {
+    // Parse the natural language query to determine intent
+    const parsedQuery = parseAnalyticsQuery(userQuery.toLowerCase());
+    
+    // Generate SQL and fetch data based on intent
+    const result = await generateAnalyticsResponse(parsedQuery, chart_type);
+    
+    res.json(result);
+  } catch (error: any) {
+    console.error('AI Analytics error:', error);
+    res.status(500).json({ 
+      error: 'Failed to process analytics query',
+      message: error.message 
+    });
+  }
+});
+
+// Parse natural language query
+function parseAnalyticsQuery(query: string) {
+  const keywords = {
+    fuel: ['fuel', 'consumption', 'liters', 'gas', 'diesel', 'mileage'],
+    maintenance: ['repair', 'maintenance', 'service', 'fix', 'broken'],
+    accidents: ['accident', 'incident', 'crash', 'collision', 'safety'],
+    vehicles: ['vehicle', 'car', 'truck', 'fleet', 'automobile'],
+    drivers: ['driver', 'staff', 'employee', 'personnel'],
+    costs: ['cost', 'expense', 'spend', 'price', 'money', 'budget'],
+    performance: ['performance', 'efficiency', 'productivity', 'rating'],
+    trends: ['trend', 'over time', 'monthly', 'weekly', 'yearly', 'history']
+  };
+  
+  const detectedTopics: string[] = [];
+  
+  for (const [topic, words] of Object.entries(keywords)) {
+    if (words.some(word => query.includes(word))) {
+      detectedTopics.push(topic);
+    }
+  }
+  
+  // Detect time range
+  let timeRange = '30 days';
+  if (query.includes('year') || query.includes('annual')) timeRange = '1 year';
+  else if (query.includes('month')) timeRange = '30 days';
+  else if (query.includes('week')) timeRange = '7 days';
+  else if (query.includes('all time') || query.includes('ever')) timeRange = 'all';
+  
+  // Detect aggregation
+  let aggregation = 'sum';
+  if (query.includes('average') || query.includes('avg')) aggregation = 'avg';
+  if (query.includes('count') || query.includes('number')) aggregation = 'count';
+  if (query.includes('max') || query.includes('highest')) aggregation = 'max';
+  if (query.includes('min') || query.includes('lowest')) aggregation = 'min';
+  
+  // Detect grouping
+  let groupBy = null;
+  if (query.includes('by vehicle') || query.includes('per vehicle')) groupBy = 'vehicle';
+  if (query.includes('by driver') || query.includes('per driver')) groupBy = 'driver';
+  if (query.includes('by month') || query.includes('monthly')) groupBy = 'month';
+  if (query.includes('by department') || query.includes('per department')) groupBy = 'department';
+  
+  return {
+    originalQuery: query,
+    topics: detectedTopics,
+    timeRange,
+    aggregation,
+    groupBy
+  };
+}
+
+// Generate analytics response based on parsed query
+async function generateAnalyticsResponse(parsedQuery: any, requestedChartType: string) {
+  const { topics, timeRange, aggregation, groupBy } = parsedQuery;
+  
+  // Default to fuel analysis if no topics detected
+  const primaryTopic = topics[0] || 'fuel';
+  
+  let sql = '';
+  let params: any[] = [];
+  let chartType = requestedChartType === 'auto' ? 'bar' : requestedChartType;
+  let title = '';
+  let description = '';
+  
+  // Build query based on topic
+  switch (primaryTopic) {
+    case 'fuel':
+      if (groupBy === 'vehicle') {
+        sql = `
+          SELECT v.registration_num as label, 
+                 SUM(f.quantity_liters) as value,
+                 AVG(f.km_per_liter) as efficiency
+          FROM fuel_records f
+          JOIN vehicles v ON v.id = f.vehicle_id
+          ${timeRange !== 'all' ? "WHERE f.fuel_date >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''}
+          GROUP BY v.registration_num
+          ORDER BY value DESC
+          LIMIT 10
+        `;
+        title = 'Fuel Consumption by Vehicle';
+        description = `Total fuel consumed per vehicle over the last ${timeRange}`;
+      } else if (groupBy === 'month') {
+        sql = `
+          SELECT TO_CHAR(f.fuel_date, 'YYYY-MM') as label,
+                 SUM(f.quantity_liters) as value,
+                 SUM(f.amount) as cost
+          FROM fuel_records f
+          ${timeRange !== 'all' ? "WHERE f.fuel_date >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''}
+          GROUP BY TO_CHAR(f.fuel_date, 'YYYY-MM')
+          ORDER BY label
+        `;
+        title = 'Monthly Fuel Consumption';
+        description = `Fuel consumption trend over ${timeRange}`;
+        chartType = 'line';
+      } else {
+        sql = `
+          SELECT v.registration_num as label, 
+                 SUM(f.${aggregation === 'avg' ? 'km_per_liter' : 'quantity_liters'}) as value
+          FROM fuel_records f
+          JOIN vehicles v ON v.id = f.vehicle_id
+          ${timeRange !== 'all' ? "WHERE f.fuel_date >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''}
+          GROUP BY v.registration_num
+          ORDER BY value DESC
+          LIMIT 10
+        `;
+        title = 'Fuel Analysis';
+        description = `Fuel ${aggregation} by vehicle`;
+      }
+      break;
+      
+    case 'maintenance':
+      if (groupBy === 'vehicle') {
+        sql = `
+          SELECT v.registration_num as label,
+                 COUNT(*) as value,
+                 SUM(r.cost) as total_cost
+          FROM repairs r
+          JOIN vehicles v ON v.id = r.vehicle_id
+          ${timeRange !== 'all' ? "WHERE r.date_in >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''}
+          GROUP BY v.registration_num
+          ORDER BY value DESC
+          LIMIT 10
+        `;
+        title = 'Maintenance Frequency by Vehicle';
+        description = `Number of repairs per vehicle over ${timeRange}`;
+      } else {
+        sql = `
+          SELECT preventative_maintenance as label,
+                 COUNT(*) as value,
+                 AVG(cost) as avg_cost
+          FROM repairs
+          ${timeRange !== 'all' ? "WHERE date_in >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''}
+          GROUP BY preventative_maintenance
+          ORDER BY value DESC
+        `;
+        title = 'Maintenance by Type';
+        description = `Repair frequency by maintenance type`;
+        chartType = 'pie';
+      }
+      break;
+      
+    case 'costs':
+      sql = `
+        SELECT 'Fuel' as label, SUM(amount) as value
+        FROM fuel_records
+        ${timeRange !== 'all' ? "WHERE fuel_date >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''}
+        UNION ALL
+        SELECT 'Repairs', SUM(cost)
+        FROM repairs
+        ${timeRange !== 'all' ? "WHERE date_in >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''}
+        UNION ALL
+        SELECT 'Total', 
+          (SELECT COALESCE(SUM(amount), 0) FROM fuel_records ${timeRange !== 'all' ? "WHERE fuel_date >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''}) +
+          (SELECT COALESCE(SUM(cost), 0) FROM repairs ${timeRange !== 'all' ? "WHERE date_in >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''})
+      `;
+      title = 'Cost Breakdown';
+      description = `Total operational costs over ${timeRange}`;
+      chartType = 'pie';
+      break;
+      
+    case 'accidents':
+      sql = `
+        SELECT accident_type as label,
+               COUNT(*) as value
+        FROM accidents
+        ${timeRange !== 'all' ? "WHERE accident_date >= CURRENT_DATE - INTERVAL '" + timeRange + "'" : ''}
+        GROUP BY accident_type
+        ORDER BY value DESC
+      `;
+      title = 'Accidents by Type';
+      description = `Accident distribution over ${timeRange}`;
+      chartType = 'pie';
+      break;
+      
+    case 'vehicles':
+      sql = `
+        SELECT status as label,
+               COUNT(*) as value
+        FROM vehicles
+        GROUP BY status
+        ORDER BY value DESC
+      `;
+      title = 'Vehicle Status Distribution';
+      description = 'Current vehicle status breakdown';
+      chartType = 'pie';
+      break;
+      
+    default:
+      sql = `
+        SELECT 'Total Vehicles' as label, COUNT(*) as value FROM vehicles
+        UNION ALL
+        SELECT 'Active Vehicles', COUNT(*) FROM vehicles WHERE status = 'Active'
+        UNION ALL
+        SELECT 'Total Staff', COUNT(*) FROM staff
+        UNION ALL
+        SELECT 'Total Drivers', COUNT(*) FROM staff WHERE role = 'Driver'
+      `;
+      title = 'Fleet Overview';
+      description = 'General fleet statistics';
+  }
+  
+  // Execute query
+  const result = await query(sql, params);
+  
+  // Format data for charts
+  const chartData = result.map((row: any) => ({
+    label: row.label,
+    value: parseFloat(row.value) || 0,
+    ...row
+  }));
+  
+  // Generate insights
+  const insights = generateInsights(chartData, primaryTopic, aggregation);
+  
+  return {
+    title,
+    description,
+    chart_type: chartType,
+    data: chartData,
+    insights,
+    query_details: {
+      topics,
+      time_range: timeRange,
+      aggregation,
+      group_by: groupBy
+    }
+  };
+}
+
+// Generate insights from data
+function generateInsights(data: any[], topic: string, aggregation: string) {
+  if (data.length === 0) return ['No data available for analysis'];
+  
+  const insights: string[] = [];
+  const values = data.map(d => d.value);
+  const total = values.reduce((a, b) => a + b, 0);
+  const avg = total / values.length;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  
+  // Top performer
+  const topItem = data.find(d => d.value === max);
+  if (topItem) {
+    insights.push(`${topItem.label} has the highest ${topic} ${aggregation} at ${max.toFixed(2)}`);
+  }
+  
+  // Average insight
+  insights.push(`Average ${topic} ${aggregation} across all items: ${avg.toFixed(2)}`);
+  
+  // Trends for multiple data points
+  if (data.length > 2) {
+    const aboveAvg = data.filter(d => d.value > avg).length;
+    const belowAvg = data.filter(d => d.value < avg).length;
+    insights.push(`${aboveAvg} items above average, ${belowAvg} items below average`);
+  }
+  
+  // Topic-specific insights
+  if (topic === 'fuel' && avg > 0) {
+    if (avg < 8) {
+      insights.push('⚠️ Low fuel efficiency detected. Consider vehicle maintenance checks.');
+    } else if (avg > 12) {
+      insights.push('✅ Good fuel efficiency across the fleet.');
+    }
+  }
+  
+  if (topic === 'maintenance' && max > 5) {
+    insights.push('⚠️ Some vehicles require frequent repairs. Consider replacement evaluation.');
+  }
+  
+  return insights;
+}
+
+// Get available AI analytics queries suggestions
+router.get('/ai-suggestions', async (req, res) => {
+  const suggestions = [
+    { query: 'Show fuel consumption by vehicle', chart_type: 'bar' },
+    { query: 'Monthly fuel costs trend', chart_type: 'line' },
+    { query: 'Maintenance costs by vehicle', chart_type: 'bar' },
+    { query: 'Breakdown of operational costs', chart_type: 'pie' },
+    { query: 'Accidents by type this year', chart_type: 'pie' },
+    { query: 'Vehicle status distribution', chart_type: 'pie' },
+    { query: 'Fuel efficiency by driver', chart_type: 'bar' },
+    { query: 'Repair frequency by vehicle', chart_type: 'bar' },
+    { query: 'Average fuel consumption last month', chart_type: 'bar' },
+    { query: 'Total maintenance costs this year', chart_type: 'line' }
+  ];
+  
+  res.json(suggestions);
 });
 
 export default router;

@@ -23,10 +23,13 @@ export default function Training({ apiUrl, user }: TrainingProps) {
   const [selectedEnrollment, setSelectedEnrollment] = useState<any>(null);
   const [slides, setSlides] = useState<any[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [slideNotes, setSlideNotes] = useState<Record<string, string>>({});
+  const [loadingNotes, setLoadingNotes] = useState<Record<string, boolean>>({});
   const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [quizResult, setQuizResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   
   const token = localStorage.getItem('token');
   const isManager = ['admin', 'manager', 'transport_supervisor'].includes(user?.role);
@@ -41,23 +44,62 @@ export default function Training({ apiUrl, user }: TrainingProps) {
   };
 
   const fetchCourses = async () => {
-    const res = await fetch(`${apiUrl}/training/courses`, { headers: { 'Authorization': `Bearer ${token}` } });
-    if (res.ok) setCourses(await res.json());
+    try {
+      const res = await fetch(`${apiUrl}/training/courses`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) setCourses(await res.json());
+    } catch (err) {
+      console.error('Failed to fetch courses:', err);
+    }
   };
 
   const fetchEnrollments = async () => {
-    const res = await fetch(`${apiUrl}/training/my-enrollments`, { headers: { 'Authorization': `Bearer ${token}` } });
-    if (res.ok) setEnrollments(await res.json());
+    try {
+      const res = await fetch(`${apiUrl}/training/my-enrollments`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) setEnrollments(await res.json());
+    } catch (err) {
+      console.error('Failed to fetch enrollments:', err);
+    }
   };
 
   const fetchCertificates = async () => {
-    const res = await fetch(`${apiUrl}/training/my-certificates`, { headers: { 'Authorization': `Bearer ${token}` } });
-    if (res.ok) setCertificates(await res.json());
+    try {
+      const res = await fetch(`${apiUrl}/training/my-certificates`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) setCertificates(await res.json());
+    } catch (err) {
+      console.error('Failed to fetch certificates:', err);
+    }
   };
 
   const fetchLockedEnrollments = async () => {
-    const res = await fetch(`${apiUrl}/training/locked`, { headers: { 'Authorization': `Bearer ${token}` } });
-    if (res.ok) setLockedEnrollments(await res.json());
+    try {
+      const res = await fetch(`${apiUrl}/training/locked`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) setLockedEnrollments(await res.json());
+    } catch (err) {
+      console.error('Failed to fetch locked enrollments:', err);
+    }
+  };
+
+  // Generate AI notes for a slide
+  const generateSlideNotes = async (slideId: string, courseId: string) => {
+    if (slideNotes[slideId]) return; // Already generated
+    
+    setLoadingNotes(prev => ({ ...prev, [slideId]: true }));
+    
+    try {
+      const res = await fetch(`${apiUrl}/training/courses/${courseId}/slides/${slideId}/generate-notes`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setSlideNotes(prev => ({ ...prev, [slideId]: data.notes }));
+      }
+    } catch (err) {
+      console.error('Failed to generate notes:', err);
+    } finally {
+      setLoadingNotes(prev => ({ ...prev, [slideId]: false }));
+    }
   };
 
   // Enroll in course
@@ -68,6 +110,7 @@ export default function Training({ apiUrl, user }: TrainingProps) {
     }
     
     setLoading(true);
+    setError('');
     try {
       const res = await fetch(`${apiUrl}/training/enroll`, {
         method: 'POST',
@@ -77,38 +120,69 @@ export default function Training({ apiUrl, user }: TrainingProps) {
       
       if (res.ok) {
         await fetchEnrollments();
-        setView('my-training'); // Switch to My Training view so they can see it
+        setView('my-training');
       } else {
         const err = await res.json();
-        alert(err.error || 'Failed to enroll. You may already be enrolled in this course.');
+        setError(err.error || 'Failed to enroll. You may already be enrolled in this course.');
       }
     } catch (error) {
-      alert('Network error. Please try again.');
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // Start training (view slides)
   const startTraining = async (enrollment: any) => {
     setSelectedEnrollment(enrollment);
-    const res = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/full`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setSlides(data.slides || []);
-      setCurrentSlide(enrollment.current_slide || 0);
-      setView('slides');
+    setError('');
+    
+    try {
+      const res = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/full`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setSlides(data.slides || []);
+        setCurrentSlide(enrollment.current_slide || 0);
+        setView('slides');
+        
+        // Pre-fetch notes for the first slide
+        if (data.slides?.[0]?.id) {
+          generateSlideNotes(data.slides[0].id, enrollment.course_id);
+        }
+      } else {
+        setError('Failed to load course slides');
+      }
+    } catch (err) {
+      setError('Network error loading slides');
     }
   };
 
   // Update slide progress
   const updateProgress = async (slideNum: number) => {
-    await fetch(`${apiUrl}/training/enrollments/${selectedEnrollment.id}/progress`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slide_number: slideNum })
-    });
+    try {
+      await fetch(`${apiUrl}/training/enrollments/${selectedEnrollment.id}/progress`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slide_number: slideNum })
+      });
+    } catch (err) {
+      console.error('Failed to update progress:', err);
+    }
+  };
+
+  // Handle slide navigation
+  const goToSlide = (newSlide: number) => {
+    setCurrentSlide(newSlide);
+    updateProgress(newSlide);
+    
+    // Generate notes for the new slide
+    const slide = slides[newSlide];
+    if (slide?.id && !slideNotes[slide.id]) {
+      generateSlideNotes(slide.id, selectedEnrollment.course_id);
+    }
   };
 
   // Generate/Start Quiz
@@ -116,70 +190,102 @@ export default function Training({ apiUrl, user }: TrainingProps) {
     setSelectedEnrollment(enrollment);
     setQuizResult(null);
     setQuizAnswers({});
+    setError('');
     
-    // First ensure we have quiz questions
-    let questionsRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/quiz`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    let questions = await questionsRes.json();
-    
-    // If no questions, generate them
-    if (questions.length === 0) {
-      setLoading(true);
-      await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/generate-quiz`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ num_questions: 10 })
-      });
-      
-      // Fetch again
-      questionsRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/quiz${enrollment.quiz_attempts > 0 ? '?exclude_used=true&enrollment_id=' + enrollment.id : ''}`, {
+    try {
+      // First ensure we have quiz questions
+      let questionsRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/quiz?exclude_used=true&enrollment_id=${enrollment.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      questions = await questionsRes.json();
+      
+      let questions = await questionsRes.json();
+      
+      // If no questions, generate them
+      if (questions.length === 0) {
+        setLoading(true);
+        const genRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/generate-quiz`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ num_questions: 10 })
+        });
+        
+        if (!genRes.ok) {
+          setError('Failed to generate quiz questions');
+          setLoading(false);
+          return;
+        }
+        
+        // Fetch again with exclusion
+        questionsRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/quiz?exclude_used=true&enrollment_id=${enrollment.id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        questions = await questionsRes.json();
+        setLoading(false);
+      }
+      
+      if (questions.length === 0) {
+        setError('No quiz questions available. Please contact your manager.');
+        return;
+      }
+      
+      setQuizQuestions(questions);
+      setView('quiz');
+    } catch (err) {
+      console.error('Failed to start quiz:', err);
+      setError('Failed to start quiz. Please try again.');
       setLoading(false);
     }
-    
-    setQuizQuestions(questions);
-    setView('quiz');
   };
 
   // Submit Quiz
   const submitQuiz = async () => {
     if (Object.keys(quizAnswers).length < quizQuestions.length) {
-      alert('Please answer all questions');
+      setError('Please answer all questions');
       return;
     }
     
     setLoading(true);
-    const res = await fetch(`${apiUrl}/training/enrollments/${selectedEnrollment.id}/quiz-submit`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers: quizAnswers })
-    });
+    setError('');
     
-    if (res.ok) {
-      const result = await res.json();
-      setQuizResult(result);
-      fetchEnrollments();
-      if (result.passed) fetchCertificates();
-    } else {
-      const err = await res.json();
-      alert(err.error);
+    try {
+      const res = await fetch(`${apiUrl}/training/enrollments/${selectedEnrollment.id}/quiz-submit`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: quizAnswers })
+      });
+      
+      if (res.ok) {
+        const result = await res.json();
+        setQuizResult(result);
+        fetchEnrollments();
+        if (result.passed) fetchCertificates();
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Failed to submit quiz');
+      }
+    } catch (err) {
+      setError('Network error submitting quiz');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // Unlock training (manager)
   const unlockTraining = async (enrollmentId: string) => {
-    const res = await fetch(`${apiUrl}/training/enrollments/${enrollmentId}/unlock`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.ok) {
-      alert('Training unlocked!');
-      fetchLockedEnrollments();
+    try {
+      const res = await fetch(`${apiUrl}/training/enrollments/${enrollmentId}/unlock`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        fetchLockedEnrollments();
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Failed to unlock training');
+      }
+    } catch (err) {
+      setError('Network error unlocking training');
     }
   };
 
@@ -232,6 +338,9 @@ export default function Training({ apiUrl, user }: TrainingProps) {
   // Slides View
   if (view === 'slides' && selectedEnrollment) {
     const slide = slides[currentSlide];
+    const currentSlideNotes = slide?.id ? slideNotes[slide.id] : null;
+    const isLoadingNotes = slide?.id ? loadingNotes[slide.id] : false;
+    
     return (
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-4">
@@ -256,13 +365,40 @@ export default function Training({ apiUrl, user }: TrainingProps) {
               {slide.media_url && (
                 <img src={slide.media_url} alt={slide.title} className="max-h-64 rounded" />
               )}
+              
+              {/* AI Notes Section */}
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">🤖</span>
+                  <h4 className="font-semibold text-blue-900">AI Notes</h4>
+                  {!currentSlideNotes && !isLoadingNotes && (
+                    <button
+                      onClick={() => generateSlideNotes(slide.id, selectedEnrollment.course_id)}
+                      className="ml-auto text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                    >
+                      Generate Notes
+                    </button>
+                  )}
+                  {isLoadingNotes && (
+                    <span className="ml-auto text-sm text-blue-600">Generating...</span>
+                  )}
+                </div>
+                
+                {currentSlideNotes ? (
+                  <div className="text-sm text-blue-800 whitespace-pre-wrap">{currentSlideNotes}</div>
+                ) : (
+                  <p className="text-sm text-blue-600 italic">
+                    {isLoadingNotes ? 'Generating AI notes...' : 'Click "Generate Notes" to get AI-generated study notes for this slide.'}
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
         
         <div className="flex justify-between mt-6">
           <button 
-            onClick={() => { setCurrentSlide(c => c - 1); updateProgress(currentSlide - 1); }}
+            onClick={() => goToSlide(currentSlide - 1)}
             disabled={currentSlide === 0}
             className="px-6 py-2 bg-gray-200 rounded disabled:opacity-50"
           >
@@ -271,7 +407,7 @@ export default function Training({ apiUrl, user }: TrainingProps) {
           
           {currentSlide < slides.length - 1 ? (
             <button 
-              onClick={() => { setCurrentSlide(c => c + 1); updateProgress(currentSlide + 1); }}
+              onClick={() => goToSlide(currentSlide + 1)}
               className="px-6 py-2 bg-blue-600 text-white rounded"
             >
               Next →
@@ -297,6 +433,10 @@ export default function Training({ apiUrl, user }: TrainingProps) {
           <h2 className="text-xl font-bold">Quiz: {selectedEnrollment.course_name}</h2>
           <button onClick={() => setView('my-training')} className="text-gray-600 hover:text-gray-800">← Exit</button>
         </div>
+        
+        {error && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">{error}</div>
+        )}
         
         {quizResult ? (
           <div className={`p-8 rounded-lg text-center ${quizResult.passed ? 'bg-green-50' : quizResult.attempts_remaining === 0 ? 'bg-red-50' : 'bg-yellow-50'}`}>
@@ -336,7 +476,7 @@ export default function Training({ apiUrl, user }: TrainingProps) {
         ) : (
           <div className="space-y-4">
             <div className="bg-blue-50 p-4 rounded text-sm">
-              Attempt {selectedEnrollment.quiz_attempts + 1} of 3 • Answer all 10 questions • Need 70% to pass
+              Attempt {selectedEnrollment.quiz_attempts + 1} of 3 • Answer all {quizQuestions.length} questions • Need 70% to pass
             </div>
             
             {quizQuestions.map((q, idx) => (
@@ -390,6 +530,10 @@ export default function Training({ apiUrl, user }: TrainingProps) {
           )}
         </div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg">{error}</div>
+      )}
 
       {/* Dashboard View */}
       {view === 'dashboard' && (

@@ -339,17 +339,25 @@ router.post('/:id/allocate', async (req: any, res) => {
   }
 });
 
-// Submit driver inspection - NOW INCLUDES STARTING ODOMETER
+// Submit driver inspection - FLAG VEHICLE AS DEFECTIVE ON FAILURE
 router.post('/:id/inspection', async (req: any, res) => {
   const { id } = req.params;
   const { 
     tires_ok, brakes_ok, lights_ok, oil_ok, coolant_ok,
     battery_ok, wipers_ok, mirrors_ok, seatbelts_ok, fuel_ok,
     defects_found, defect_photos, passed,
-    starting_odometer  // NEW: Starting odometer recorded at end of inspection
+    starting_odometer
   } = req.body;
 
   try {
+    // Get requisition details first
+    const reqResult = await query('SELECT * FROM requisitions WHERE id = $1', [id]);
+    if (reqResult.length === 0) {
+      return res.status(404).json({ error: 'Requisition not found' });
+    }
+    
+    const requisition = reqResult[0];
+    
     await query(`
       UPDATE requisitions 
       SET 
@@ -369,6 +377,37 @@ router.post('/:id/inspection', async (req: any, res) => {
       passed ? 'ready_for_departure' : 'inspection_failed',
       id
     ]);
+
+    // If inspection failed, flag the vehicle as defective
+    if (!passed && requisition.vehicle_id) {
+      await query(`
+        UPDATE vehicles 
+        SET status = 'Defective', 
+            defect_notes = $1,
+            defect_reported_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `, [defects_found || 'Vehicle failed pre-trip inspection', requisition.vehicle_id]);
+      
+      // Create a job card entry for the defective vehicle
+      const jobCardId = uuidv4();
+      const year = new Date().getFullYear();
+      const jobCardNumber = `JB-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${year}`;
+      
+      await query(`
+        INSERT INTO job_cards (
+          id, job_card_number, vehicle_id, defect_description, 
+          reported_by, reported_at, status, source_type, source_id
+        ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, 'Pending', 'inspection', $6)
+      `, [
+        jobCardId, 
+        jobCardNumber, 
+        requisition.vehicle_id,
+        defects_found || 'Vehicle failed pre-trip inspection',
+        requisition.driver_id,
+        id
+      ]);
+    }
 
     // Get details for notification
     const result = await query(`
@@ -397,7 +436,12 @@ router.post('/:id/inspection', async (req: any, res) => {
       }
     }
 
-    res.json({ message: 'Inspection submitted', passed, requisition: result[0] });
+    res.json({ 
+      message: 'Inspection submitted', 
+      passed, 
+      requisition: result[0],
+      vehicle_flagged: !passed
+    });
   } catch (error) {
     console.error('Inspection error:', error);
     res.status(500).json({ error: 'Failed to submit inspection' });

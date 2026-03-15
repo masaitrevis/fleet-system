@@ -26,10 +26,18 @@ interface MaintenanceData {
   productivity: number;
 }
 
-// Colors for charts
+interface AIQueryResult {
+  title: string;
+  description: string;
+  chart_type: string;
+  data: any[];
+  insights: string[];
+}
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
 export default function Analytics({ apiUrl }: AnalyticsProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'drivers' | 'maintenance'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'drivers' | 'maintenance' | 'ai-query'>('overview');
   const [driverKPIs, setDriverKPIs] = useState<DriverKPI[]>([]);
   const [maintenanceData, setMaintenanceData] = useState<MaintenanceData[]>([]);
   const [fleetData, setFleetData] = useState({
@@ -39,13 +47,23 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
     avgFuelConsumption: 0
   });
   const [loading, setLoading] = useState(true);
+  
+  // AI Query states
+  const [aiQuery, setAiQuery] = useState('');
+  const [aiResult, setAiResult] = useState<AIQueryResult | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<Array<{query: string; chart_type: string}>>([]);
+  const [selectedChartType, setSelectedChartType] = useState('auto');
+  
   const token = localStorage.getItem('token');
 
   useEffect(() => {
     fetchAnalyticsData();
+    fetchAiSuggestions();
   }, []);
 
   const fetchAnalyticsData = async () => {
+    setLoading(true);
     try {
       const [driversRes, maintenanceRes, fleetRes] = await Promise.all([
         fetch(`${apiUrl}/analytics/driver-kpis`, { headers: { 'Authorization': `Bearer ${token}` } }),
@@ -60,6 +78,52 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
       console.error('Failed to load analytics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAiSuggestions = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/analytics/ai-suggestions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiSuggestions(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch AI suggestions');
+    }
+  };
+
+  const handleAiQuery = async () => {
+    if (!aiQuery.trim()) return;
+    
+    setAiLoading(true);
+    setAiResult(null);
+    
+    try {
+      const res = await fetch(`${apiUrl}/analytics/ai-query`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          query: aiQuery,
+          chart_type: selectedChartType
+        })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setAiResult(data);
+      } else {
+        console.error('AI query failed');
+      }
+    } catch (err) {
+      console.error('AI query error:', err);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -100,24 +164,184 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
     { month: 'Jun', target: 10.5, actual: 10.6 }
   ];
 
+  const renderAIChart = () => {
+    if (!aiResult || !aiResult.data) return null;
+    
+    const { chart_type, data } = aiResult;
+    
+    switch (chart_type) {
+      case 'pie':
+        return (
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                outerRadius={100}
+                dataKey="value"
+                label={({ name, value }) => `${name}: ${value}`}
+              >
+                {data.map((_: any, index: number) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        );
+        
+      case 'line':
+        return (
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="value" stroke="#3B82F6" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        );
+        
+      case 'bar':
+      default:
+        return (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="value" fill="#3B82F6" />
+            </BarChart>
+          </ResponsiveContainer>
+        );
+    }
+  };
+
   if (loading) return <div className="p-8">Loading analytics...</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">📈 Analytics Dashboard</h1>
-        <div className="bg-gray-100 p-1 rounded-lg flex">
-          {(['overview', 'drivers', 'maintenance'] as const).map(tab => (
+        <div className="bg-gray-100 p-1 rounded-lg flex flex-wrap">
+          {(['overview', 'drivers', 'maintenance', 'ai-query'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 rounded-md capitalize ${activeTab === tab ? 'bg-white shadow' : 'text-gray-600'}`}
             >
-              {tab}
+              {tab === 'ai-query' ? '🤖 AI Query' : tab}
             </button>
           ))}
         </div>
       </div>
+
+      {/* AI Query Tab */}
+      {activeTab === 'ai-query' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-xl shadow">
+            <h3 className="text-lg font-semibold mb-4">🤖 AI Analytics Generator</h3>
+            <p className="text-gray-600 mb-4">
+              Ask questions about your fleet data in natural language. Try: "Show fuel consumption by vehicle" or "What are my maintenance costs this month?"
+            </p>
+            
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={aiQuery}
+                onChange={(e) => setAiQuery(e.target.value)}
+                placeholder="Ask a question about your fleet..."
+                className="flex-1 border rounded-lg px-4 py-2"
+                onKeyPress={(e) => e.key === 'Enter' && handleAiQuery()}
+              />
+              <select
+                value={selectedChartType}
+                onChange={(e) => setSelectedChartType(e.target.value)}
+                className="border rounded-lg px-3 py-2"
+              >
+                <option value="auto">Auto</option>
+                <option value="bar">Bar Chart</option>
+                <option value="line">Line Chart</option>
+                <option value="pie">Pie Chart</option>
+              </select>
+              <button
+                onClick={handleAiQuery}
+                disabled={aiLoading || !aiQuery.trim()}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {aiLoading ? 'Analyzing...' : 'Ask AI'}
+              </button>
+            </div>
+            
+            {/* Suggestions */}
+            <div className="mb-4">
+              <p className="text-sm text-gray-500 mb-2">Suggested queries:</p>
+              <div className="flex flex-wrap gap-2">
+                {aiSuggestions.slice(0, 5).map((suggestion, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => { setAiQuery(suggestion.query); setSelectedChartType(suggestion.chart_type); }}
+                    className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-full transition-colors"
+                  >
+                    {suggestion.query}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* AI Results */}
+          {aiResult && (
+            <div className="bg-white p-6 rounded-xl shadow">
+              <h3 className="text-lg font-semibold mb-2">{aiResult.title}</h3>
+              <p className="text-gray-600 mb-4">{aiResult.description}</p>
+              
+              <div className="mb-6">
+                {renderAIChart()}
+              </div>
+              
+              {/* Insights */}
+              {aiResult.insights && aiResult.insights.length > 0 && (
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="font-semibold text-blue-900 mb-2">💡 AI Insights</h4>
+                  <ul className="space-y-1">
+                    {aiResult.insights.map((insight, idx) => (
+                      <li key={idx} className="text-sm text-blue-800">{insight}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Data Table */}
+              {aiResult.data && aiResult.data.length > 0 && (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left p-2">{aiResult.chart_type === 'line' ? 'Period' : 'Item'}</th>
+                        <th className="text-right p-2">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aiResult.data.map((row: any, idx: number) => (
+                        <tr key={idx} className="border-b">
+                          <td className="p-2">{row.label || row.name || row.month}</td>
+                          <td className="text-right p-2 font-medium">
+                            {typeof row.value === 'number' ? row.value.toLocaleString() : row.value}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (

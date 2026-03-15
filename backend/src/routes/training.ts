@@ -111,6 +111,114 @@ router.post('/courses/:id/slides', async (req: any, res) => {
   }
 });
 
+// ========== AI SLIDE NOTES GENERATION ==========
+
+// Generate AI notes for a slide
+router.post('/courses/:courseId/slides/:slideId/generate-notes', async (req: any, res) => {
+  const { courseId, slideId } = req.params;
+  
+  try {
+    // Get slide content
+    const slideResult = await query(
+      'SELECT * FROM training_slides WHERE id = $1 AND course_id = $2',
+      [slideId, courseId]
+    );
+    
+    if (slideResult.length === 0) {
+      return res.status(404).json({ error: 'Slide not found' });
+    }
+    
+    const slide = slideResult[0];
+    
+    // Generate AI notes based on slide content
+    const aiNotes = generateSlideNotes(slide.title, slide.content);
+    
+    // Save notes to database
+    await query(`
+      UPDATE training_slides 
+      SET ai_notes = $1, ai_notes_generated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [aiNotes, slideId]);
+    
+    res.json({ 
+      slide_id: slideId,
+      notes: aiNotes,
+      generated_at: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('Generate notes error:', error);
+    res.status(500).json({ error: 'Failed to generate notes: ' + error.message });
+  }
+});
+
+// Get AI notes for a slide
+router.get('/courses/:courseId/slides/:slideId/notes', async (req, res) => {
+  const { slideId } = req.params;
+  
+  try {
+    const result = await query(
+      'SELECT ai_notes, ai_notes_generated_at FROM training_slides WHERE id = $1',
+      [slideId]
+    );
+    
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Slide not found' });
+    }
+    
+    res.json({
+      notes: result[0].ai_notes,
+      generated_at: result[0].ai_notes_generated_at
+    });
+  } catch (error) {
+    console.error('Get notes error:', error);
+    res.status(500).json({ error: 'Failed to fetch notes' });
+  }
+});
+
+// Helper function to generate slide notes
+function generateSlideNotes(title: string, content: string): string {
+  // Generate context-aware notes based on slide content
+  const keyPoints = content
+    .split('\n')
+    .filter(line => line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*'))
+    .map(line => line.trim().replace(/^[•\-\*]\s*/, ''));
+  
+  if (keyPoints.length === 0) {
+    return `📚 **Key Takeaway**: ${title}\n\nThis section covers important concepts. Review the main points to ensure understanding.`;
+  }
+  
+  let notes = `📚 **${title} - Key Points**\n\n`;
+  
+  keyPoints.forEach((point, index) => {
+    notes += `${index + 1}. **${point}**\n`;
+    
+    // Add contextual explanation based on content
+    if (point.toLowerCase().includes('safety') || point.toLowerCase().includes('defensive')) {
+      notes += `   → Critical for accident prevention and driver safety\n`;
+    } else if (point.toLowerCase().includes('distance') || point.toLowerCase().includes('following')) {
+      notes += `   → Maintain safe space cushion for reaction time\n`;
+    } else if (point.toLowerCase().includes('speed')) {
+      notes += `   → Adjust speed based on road and weather conditions\n`;
+    } else if (point.toLowerCase().includes('scan') || point.toLowerCase().includes('look')) {
+      notes += `   → Constant vigilance prevents accidents\n`;
+    } else if (point.toLowerCase().includes('distraction') || point.toLowerCase().includes('phone')) {
+      notes += `   → Focus 100% on driving - distractions kill\n`;
+    } else if (point.toLowerCase().includes('fatigue') || point.toLowerCase().includes('tired')) {
+      notes += `   → Rest when needed - fatigue impairs judgment\n`;
+    } else if (point.toLowerCase().includes('maintenance') || point.toLowerCase().includes('inspection')) {
+      notes += `   → Regular checks prevent breakdowns\n`;
+    } else if (point.toLowerCase().includes('hours') || point.toLowerCase().includes('service')) {
+      notes += `   → Legal compliance requirement\n`;
+    } else {
+      notes += `   → Important concept to remember\n`;
+    }
+  });
+  
+  notes += `\n💡 **Remember**: ${title} is essential for safe and professional driving.`;
+  
+  return notes;
+}
+
 // ========== AI QUIZ GENERATION ==========
 
 // Generate quiz questions using AI
@@ -181,7 +289,7 @@ async function generateSampleQuestions(course: any, slides: any[], count: number
   return questions;
 }
 
-// Get quiz questions for a course
+// Get quiz questions for a course with used question tracking
 router.get('/courses/:id/quiz', async (req: any, res) => {
   const { id } = req.params;
   const { exclude_used, enrollment_id } = req.query;
@@ -191,24 +299,26 @@ router.get('/courses/:id/quiz', async (req: any, res) => {
     const params: any[] = [id];
     let paramIndex = 2;
     
+    // Track used questions for this enrollment
     if (exclude_used === 'true' && enrollment_id) {
-      // Get questions already used in previous attempts
+      // Get questions already used in previous attempts for this enrollment
       const usedQuestions = await query(`
-        SELECT answers FROM training_quiz_attempts 
+        SELECT DISTINCT question_id FROM training_quiz_attempt_details 
+        WHERE enrollment_id = $1
+        UNION
+        SELECT DISTINCT jsonb_object_keys(answers) as question_id 
+        FROM training_quiz_attempts 
         WHERE enrollment_id = $1 AND answers IS NOT NULL
       `, [enrollment_id]);
       
-      const usedIds = new Set();
-      usedQuestions.forEach((attempt: any) => {
-        if (attempt.answers) {
-          Object.keys(JSON.parse(attempt.answers || '{}')).forEach(id => usedIds.add(id));
-        }
-      });
+      const usedIds = usedQuestions
+        .map((row: any) => row.question_id)
+        .filter((id: string) => id && id.length > 0);
       
-      if (usedIds.size > 0) {
-        sql += ` AND id NOT IN (${Array.from(usedIds).map((_, i) => `$${paramIndex + i}`).join(',')})`;
-        params.push(...Array.from(usedIds));
-        paramIndex += usedIds.size;
+      if (usedIds.length > 0) {
+        sql += ` AND id NOT IN (${usedIds.map((_: any, i: number) => `$${paramIndex + i}`).join(',')})`;
+        params.push(...usedIds);
+        paramIndex += usedIds.length;
       }
     }
     
@@ -379,6 +489,18 @@ router.post('/enrollments/:id/quiz-submit', async (req: any, res) => {
       INSERT INTO training_quiz_attempts (id, enrollment_id, attempt_number, completed_at, score, total_questions, correct_answers, passed, answers)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8)
     `, [attemptId, id, newAttemptNumber, score, totalQuestions, correct, passed, JSON.stringify(answers)]);
+    
+    // Record individual question details for tracking
+    for (const [questionId, answer] of Object.entries(answers)) {
+      const question = questions.find((q: any) => q.id === questionId);
+      if (question) {
+        await query(`
+          INSERT INTO training_quiz_attempt_details (id, attempt_id, enrollment_id, question_id, selected_answer, is_correct)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (attempt_id, question_id) DO NOTHING
+        `, [uuidv4(), attemptId, id, questionId, answer, answer === question.correct_option]);
+      }
+    }
     
     // Update enrollment
     let newStatus = passed ? 'passed' : (newAttemptNumber >= MAX_ATTEMPTS ? 'locked' : 'quiz_pending');

@@ -15,6 +15,7 @@ import Audits from './components/Audits';
 import Training from './components/Training';
 import RequisitionModule from './components/requisition/RequisitionModule';
 import SecurityDashboard from './components/SecurityDashboard';
+import ErrorBoundary from './components/ErrorBoundary';
 import { getEffectiveRole } from './utils/roles';
 
 import Admin from './components/Admin';
@@ -36,11 +37,11 @@ function AppContent() {
   const navItems: { key: View; label: string; icon: string; roles: string[] }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
     { key: 'security', label: 'Security', icon: '🔒', roles: ['admin', 'manager', 'security', 'transport_supervisor', 'hod'] },
-    { key: 'requisitions', label: 'Requisitions', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod'] },
+    { key: 'requisitions', label: 'Requisitions', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'dept_supervisor', 'hod'] },
     { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'hod', 'security'] },
     { key: 'audits', label: 'Audits', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer', 'transport_supervisor', 'hod'] },
-    { key: 'training', label: 'Training', icon: '🎓', roles: ['admin', 'manager', 'hod'] },
-    { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
+    { key: 'training', label: 'Training', icon: '🎓', roles: ['admin', 'manager', 'hod', 'driver'] },
+    { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
     { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager', 'hod'] },
     { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
     { key: 'fuel', label: 'Fuel', icon: '⛽', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
@@ -159,7 +160,9 @@ function AppContent() {
 
       {/* Main Content */}
       <main className="flex-1 p-4 md:p-8 overflow-auto min-h-0">
-        {renderView()}
+        <ErrorBoundary>
+          {renderView()}
+        </ErrorBoundary>
       </main>
     </div>
   );

@@ -49,6 +49,15 @@ interface Stats {
   }>;
 }
 
+interface DriverStats {
+  trips_completed: number;
+  trips_pending: number;
+  safety_score: number;
+  fuel_efficiency: number;
+  incidents: number;
+  total_distance: number;
+}
+
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
 // Role-based visibility config
@@ -57,8 +66,10 @@ const DRIVER_HIDDEN_CARDS = ['Total Staff', 'Pending Repairs'];
 export default function Dashboard({ apiUrl, user }: DashboardProps) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [myStats, setMyStats] = useState<any>(null);
+  const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [error, setError] = useState('');
 
   const token = localStorage.getItem('token');
   
@@ -68,10 +79,14 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
 
   const fetchStats = () => {
     setLoading(true);
+    setError('');
     fetch(`${apiUrl}/dashboard/stats`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to fetch dashboard stats');
+        return r.json();
+      })
       .then(data => {
         console.log('Dashboard stats:', data);
         setStats(data);
@@ -80,6 +95,7 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
       })
       .catch(err => {
         console.error('Dashboard error:', err);
+        setError(err.message);
         setLoading(false);
       });
   };
@@ -88,6 +104,7 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
   const fetchMyStats = () => {
     if (!isDriver) return;
     
+    // Fetch my routes for trips data
     fetch(`${apiUrl}/routes/my-routes`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -103,6 +120,34 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
       .catch(err => {
         console.error('Failed to fetch my stats:', err);
       });
+
+    // Fetch driver analytics
+    fetch(`${apiUrl}/analytics/driver-summary`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(r => r.json())
+      .then(data => {
+        setDriverStats({
+          trips_completed: data?.trips_completed || 0,
+          trips_pending: data?.trips_pending || 0,
+          safety_score: data?.safety_score || 100,
+          fuel_efficiency: data?.fuel_efficiency || 0,
+          incidents: data?.incidents || 0,
+          total_distance: data?.total_distance || 0
+        });
+      })
+      .catch(err => {
+        console.error('Failed to fetch driver analytics:', err);
+        // Set default values on error
+        setDriverStats({
+          trips_completed: 0,
+          trips_pending: 0,
+          safety_score: 100,
+          fuel_efficiency: 0,
+          incidents: 0,
+          total_distance: 0
+        });
+      });
   };
 
   useEffect(() => {
@@ -113,6 +158,17 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
   }, [apiUrl, token, isDriver]);
 
   if (loading) return <div className="text-center py-12">Loading...</div>;
+  if (error) return (
+    <div className="text-center py-12">
+      <div className="text-red-600 mb-4">{error}</div>
+      <button 
+        onClick={fetchStats}
+        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+      >
+        Retry
+      </button>
+    </div>
+  );
   if (!stats) return <div className="text-center py-12 text-red-600">Failed to load stats</div>;
 
   const fleetStatusData = [
@@ -138,14 +194,131 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
     statCards = statCards.filter(card => !DRIVER_HIDDEN_CARDS.includes(card.title));
   }
 
+  // Driver-specific dashboard view
+  if (isDriver) {
+    return (
+      <div>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-800">
+              Welcome, {user?.staffName || 'Driver'}
+            </h2>
+            <p className="text-gray-500 text-sm mt-1">Driver Dashboard</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {lastUpdated && (
+              <span className="text-sm text-gray-500">
+                Updated: {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+            <button
+              onClick={() => { fetchStats(); fetchMyStats(); }}
+              disabled={loading}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Refreshing...' : '🔄 Refresh'}
+            </button>
+          </div>
+        </div>
+
+        {/* Driver Analytics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+            <div className="text-4xl mb-2">🚗</div>
+            <div className="text-3xl font-bold">{driverStats?.trips_completed || 0}</div>
+            <div className="text-white/80">Trips Completed</div>
+          </div>
+          
+          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
+            <div className="text-4xl mb-2">⭐</div>
+            <div className="text-3xl font-bold">{driverStats?.safety_score || 100}</div>
+            <div className="text-white/80">Safety Score</div>
+          </div>
+          
+          <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl p-6 text-white shadow-lg">
+            <div className="text-4xl mb-2">⛽</div>
+            <div className="text-3xl font-bold">{(driverStats?.fuel_efficiency || 0).toFixed(1)}</div>
+            <div className="text-white/80">Fuel Efficiency (km/L)</div>
+          </div>
+          
+          <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
+            <div className="text-4xl mb-2">⚠️</div>
+            <div className="text-3xl font-bold">{driverStats?.incidents || 0}</div>
+            <div className="text-white/80">Incidents</div>
+          </div>
+        </div>
+
+        {/* Driver Trip Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">📅 Trip Summary</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-600">Total Routes:</span>
+                <span className="font-semibold">{myStats?.totalRoutes || 0}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-600">Completed:</span>
+                <span className="font-semibold text-green-600">{myStats?.completed || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Pending:</span>
+                <span className="font-semibold text-orange-600">{myStats?.pending || 0}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">🛣️ Distance</h3>
+            <div className="text-center py-4">
+              <div className="text-5xl font-bold text-blue-600">
+                {(driverStats?.total_distance || 0).toLocaleString()}
+              </div>
+              <div className="text-gray-500 mt-2">km traveled</div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Performance</h3>
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>Safety Score</span>
+                  <span className="font-semibold">{driverStats?.safety_score || 100}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className={`h-2 rounded-full ${(driverStats?.safety_score || 100) >= 90 ? 'bg-green-500' : (driverStats?.safety_score || 100) >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                    style={{ width: `${driverStats?.safety_score || 100}%` }}
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>Fuel Efficiency</span>
+                  <span className="font-semibold">{(driverStats?.fuel_efficiency || 0).toFixed(1)} km/L</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="h-2 rounded-full bg-blue-500"
+                    style={{ width: `${Math.min(100, ((driverStats?.fuel_efficiency || 0) / 15) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Regular dashboard view for non-drivers
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-3xl font-bold text-gray-800">
-            {isDriver ? `Welcome, ${user?.staffName || 'Driver'}` : 'Dashboard'}
-          </h2>
-          {isDriver && <p className="text-gray-500 text-sm mt-1">Driver View - Limited Access</p>}
+          <h2 className="text-3xl font-bold text-gray-800">Dashboard</h2>
         </div>
         <div className="flex items-center gap-3">
           {lastUpdated && (
@@ -162,27 +335,6 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
           </button>
         </div>
       </div>
-
-      {/* Driver Summary Cards */}
-      {isDriver && myStats && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
-            <div className="text-4xl mb-2">🚗</div>
-            <div className="text-3xl font-bold">{myStats.totalRoutes}</div>
-            <div className="text-white/80">My Total Routes</div>
-          </div>
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
-            <div className="text-4xl mb-2">✅</div>
-            <div className="text-3xl font-bold">{myStats.completed}</div>
-            <div className="text-white/80">Completed</div>
-          </div>
-          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white shadow-lg">
-            <div className="text-4xl mb-2">⏳</div>
-            <div className="text-3xl font-bold">{myStats.pending}</div>
-            <div className="text-white/80">Pending</div>
-          </div>
-        </div>
-      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -257,82 +409,76 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
           </div>
         </div>
 
-        {!isDriver && (
-          <>
-            <div className="bg-white rounded-xl shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">💰 Monthly Fuel Costs</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between border-b pb-2">
-                  <span className="text-gray-600">Total Cost:</span>
-                  <span className="font-semibold text-red-600">${parseFloat(stats.monthlyFuel?.monthly_cost || '0').toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <span className="text-gray-600">Total Liters:</span>
-                  <span className="font-semibold">{parseFloat(stats.monthlyFuel?.monthly_liters || '0').toLocaleString()} L</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Pending Repairs:</span>
-                  <span className="font-semibold text-orange-600">{stats.repairs?.pending_repairs || 0}</span>
-                </div>
-              </div>
+        <div className="bg-white rounded-xl shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">💰 Monthly Fuel Costs</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Total Cost:</span>
+              <span className="font-semibold text-red-600">${parseFloat(stats.monthlyFuel?.monthly_cost || '0').toLocaleString()}</span>
             </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Total Liters:</span>
+              <span className="font-semibold">{parseFloat(stats.monthlyFuel?.monthly_liters || '0').toLocaleString()} L</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Pending Repairs:</span>
+              <span className="font-semibold text-orange-600">{stats.repairs?.pending_repairs || 0}</span>
+            </div>
+          </div>
+        </div>
 
-            <div className="bg-white rounded-xl shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">⛽ Fuel Costs by Vehicle</h3>
-              <ResponsiveContainer width="100%" height={150}>
-                <PieChart>
-                  <Pie
-                    data={fuelData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={60}
-                    fill="#8884d8"
-                    paddingAngle={5}
-                    dataKey="cost"
-                  >
-                    {fuelData?.map((_entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </>
-        )}
+        <div className="bg-white rounded-xl shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">⛽ Fuel Costs by Vehicle</h3>
+          <ResponsiveContainer width="100%" height={150}>
+            <PieChart>
+              <Pie
+                data={fuelData}
+                cx="50%"
+                cy="50%"
+                innerRadius={40}
+                outerRadius={60}
+                fill="#8884d8"
+                paddingAngle={5}
+                dataKey="cost"
+              >
+                {fuelData?.map((_entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
-      {/* Maintenance Due - Hidden for drivers */}
-      {!isDriver && (
-        <div className="bg-white rounded-xl shadow p-6 mb-8">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">⚠️ Maintenance Due Soon</h3>
-          {stats.maintenanceDue?.length > 0 ? (
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left p-3">Vehicle</th>
-                  <th className="text-left p-3">Model</th>
-                  <th className="text-left p-3">Current Mileage</th>
-                  <th className="text-left p-3">Service Due</th>
+      {/* Maintenance Due */}
+      <div className="bg-white rounded-xl shadow p-6 mb-8">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">⚠️ Maintenance Due Soon</h3>
+        {stats.maintenanceDue?.length > 0 ? (
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left p-3">Vehicle</th>
+                <th className="text-left p-3">Model</th>
+                <th className="text-left p-3">Current Mileage</th>
+                <th className="text-left p-3">Service Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.maintenanceDue?.map((v, i) => (
+                <tr key={i} className="border-b">
+                  <td className="p-3 font-medium">{v.registration_num}</td>
+                  <td className="p-3">{v.make_model}</td>
+                  <td className="p-3">{v.current_mileage?.toLocaleString()} km</td>
+                  <td className="p-3 text-orange-600">{v.next_service_due}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {stats.maintenanceDue?.map((v, i) => (
-                  <tr key={i} className="border-b">
-                    <td className="p-3 font-medium">{v.registration_num}</td>
-                    <td className="p-3">{v.make_model}</td>
-                    <td className="p-3">{v.current_mileage?.toLocaleString()} km</td>
-                    <td className="p-3 text-orange-600">{v.next_service_due}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="text-gray-500">✅ No maintenance due in next 30 days</p>
-          )}
-        </div>
-      )}
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-gray-500">✅ No maintenance due in next 30 days</p>
+        )}
+      </div>
     </div>
   );
 }
