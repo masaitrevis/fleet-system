@@ -144,15 +144,31 @@ router.get('/', async (req, res) => {
 // Get pending approvals (for departmental approvers)
 router.get('/pending-approvals', async (req: any, res) => {
   const userDept = req.user?.department;
+  const userRole = req.user?.role;
+  const isManager = ['admin', 'manager'].includes(userRole);
   
   try {
-    const result = await query(`
-      SELECT r.*, s.staff_name, s.email, s.department
-      FROM requisitions r
-      JOIN staff s ON r.requested_by = s.id
-      WHERE r.status = 'pending' AND s.department = ?
-      ORDER BY r.created_at DESC
-    `, [userDept]);
+    let result;
+    
+    if (isManager) {
+      // Managers see ALL pending requests (no department filter)
+      result = await query(`
+        SELECT r.*, s.staff_name, s.email, s.department
+        FROM requisitions r
+        JOIN staff s ON r.requested_by = s.id
+        WHERE r.status = 'pending'
+        ORDER BY r.created_at DESC
+      `);
+    } else {
+      // HODs and others see only their department's pending requests
+      result = await query(`
+        SELECT r.*, s.staff_name, s.email, s.department
+        FROM requisitions r
+        JOIN staff s ON r.requested_by = s.id
+        WHERE r.status = 'pending' AND s.department = ?
+        ORDER BY r.created_at DESC
+      `, [userDept]);
+    }
     
     res.json(result);
   } catch (error) {
