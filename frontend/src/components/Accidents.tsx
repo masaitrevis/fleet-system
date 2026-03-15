@@ -132,20 +132,47 @@ export default function Accidents({ apiUrl, user }: AccidentsProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...formData,
+        vehicle_id: formData.vehicle_id || undefined,
+        driver_id: formData.driver_id || undefined
+      };
+      
       const res = await fetch(`${apiUrl}/accidents`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
+      
       if (res.ok) {
         fetchAccidents();
         setView('list');
+        // Reset form
+        setFormData({
+          accident_date: new Date().toISOString().slice(0, 16),
+          gps_location: '',
+          vehicle_id: '',
+          driver_id: '',
+          accident_type: 'Collision',
+          severity: 'Minor',
+          injuries_reported: false,
+          police_notified: false,
+          third_party_involved: false,
+          weather_condition: '',
+          road_condition: '',
+          incident_description: ''
+        });
+      } else {
+        const errorData = await res.json();
+        console.error('Failed to create accident:', errorData);
+        alert('Failed to report accident: ' + (errorData.error || errorData.details || 'Unknown error'));
       }
-    } catch (err) {
-      console.error('Failed to create accident');
+    } catch (err: any) {
+      console.error('Failed to create accident:', err);
+      alert('Network error: ' + err.message);
     }
   };
 

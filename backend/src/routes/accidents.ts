@@ -169,7 +169,7 @@ router.post('/', async (req, res) => {
       id, caseNumber, accident_date, gps_location, route_id, vehicle_id, driver_id,
       accident_type, severity, injuries_reported || false, police_notified || false,
       third_party_involved || false, weather_condition, road_condition,
-      incident_description, (req as any).user?.id, 'Reported'
+      incident_description, (req as any).user?.userId, 'Reported'
     ]);
 
     // Add witnesses if provided
