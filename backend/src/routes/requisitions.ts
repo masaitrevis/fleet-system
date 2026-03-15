@@ -124,15 +124,31 @@ router.get('/my-requests', async (req: any, res) => {
   }
 });
 
-// Get all requisitions (for managers)
-router.get('/', async (req, res) => {
+// Get all requisitions (for managers) - with optional status filter
+router.get('/', async (req: any, res) => {
   try {
-    const result = await query(`
-      SELECT r.*, s.staff_name, s.email, s.department
+    const status = req.query?.status;
+    
+    let queryStr = `
+      SELECT r.*, s.staff_name, s.email, s.department,
+        d.staff_name as driver_name,
+        v.registration_num
       FROM requisitions r
       JOIN staff s ON r.requested_by = s.id
-      ORDER BY r.created_at DESC
-    `);
+      LEFT JOIN staff d ON r.driver_id = d.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+    `;
+    
+    let params: any[] = [];
+    
+    if (status) {
+      queryStr += ` WHERE r.status = ?`;
+      params.push(status);
+    }
+    
+    queryStr += ` ORDER BY r.created_at DESC`;
+    
+    const result = await query(queryStr, params);
     
     res.json(result);
   } catch (error) {
@@ -368,6 +384,15 @@ router.post('/:id/inspection', async (req: any, res) => {
         result[0].driver_name,
         passed
       ).catch((err: any) => console.error('Email failed:', err));
+      
+      // Send maintenance notification if inspection failed
+      if (!passed) {
+        emailService.sendMaintenanceNotification(
+          result[0].registration_num,
+          result[0].driver_name,
+          defects_found || 'Vehicle failed pre-trip inspection'
+        ).catch((err: any) => console.error('Maintenance email failed:', err));
+      }
     }
 
     res.json({ message: 'Inspection submitted', passed, requisition: result[0] });
@@ -444,6 +469,107 @@ router.post('/:id/rate', async (req: any, res) => {
   } catch (error) {
     console.error('Rate driver error:', error);
     res.status(500).json({ error: 'Failed to submit rating' });
+  }
+});
+
+// ========== INSPECTION FAILURE HANDLING ==========
+
+// Retry inspection - reset from inspection_failed to allocated
+router.post('/:id/retry-inspection', async (req: any, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Verify trip is in inspection_failed status
+    const checkResult = await query('SELECT * FROM requisitions WHERE id = ? AND status = ?', [id, 'inspection_failed']);
+    if (checkResult.length === 0) {
+      return res.status(400).json({ error: 'Trip not in inspection_failed status' });
+    }
+
+    // Reset status to allocated and clear inspection data
+    await query(`
+      UPDATE requisitions 
+      SET 
+        status = 'allocated',
+        inspection_passed = null,
+        inspection_completed_at = null,
+        defects_found = null,
+        inspection_tires = null,
+        inspection_brakes = null,
+        inspection_lights = null,
+        inspection_oil = null,
+        inspection_coolant = null,
+        inspection_battery = null,
+        inspection_wipers = null,
+        inspection_mirrors = null,
+        inspection_seatbelts = null,
+        inspection_fuel = null
+      WHERE id = ?
+    `, [id]);
+
+    res.json({ message: 'Inspection reset - ready for retry' });
+  } catch (error) {
+    console.error('Retry inspection error:', error);
+    res.status(500).json({ error: 'Failed to reset inspection' });
+  }
+});
+
+// Reallocate vehicle after inspection failure
+router.post('/:id/reallocate', async (req: any, res) => {
+  const { id } = req.params;
+  const { vehicle_id, driver_id } = req.body;
+  const staffId = req.user?.staffId;
+  
+  if (!vehicle_id || !driver_id) {
+    return res.status(400).json({ error: 'Vehicle and driver required' });
+  }
+
+  try {
+    // Verify trip is in inspection_failed status
+    const checkResult = await query('SELECT * FROM requisitions WHERE id = ? AND status = ?', [id, 'inspection_failed']);
+    if (checkResult.length === 0) {
+      return res.status(400).json({ error: 'Trip not in inspection_failed status' });
+    }
+
+    const allocatedBy = staffId || null;
+
+    // Update with new vehicle/driver and reset inspection
+    await query(`
+      UPDATE requisitions 
+      SET 
+        vehicle_id = ?,
+        driver_id = ?,
+        allocated_by = ?,
+        allocated_at = CURRENT_TIMESTAMP,
+        status = 'allocated',
+        inspection_passed = null,
+        inspection_completed_at = null,
+        defects_found = null,
+        inspection_tires = null,
+        inspection_brakes = null,
+        inspection_lights = null,
+        inspection_oil = null,
+        inspection_coolant = null,
+        inspection_battery = null,
+        inspection_wipers = null,
+        inspection_mirrors = null,
+        inspection_seatbelts = null,
+        inspection_fuel = null
+      WHERE id = ?
+    `, [vehicle_id, driver_id, allocatedBy, id]);
+
+    // Get updated details
+    const result = await query(`
+      SELECT r.*, v.registration_num, d.staff_name as driver_name
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      WHERE r.id = ?
+    `, [id]);
+
+    res.json({ message: 'Vehicle reallocated', requisition: result[0] });
+  } catch (error) {
+    console.error('Reallocate error:', error);
+    res.status(500).json({ error: 'Failed to reallocate vehicle' });
   }
 });
 

@@ -33,6 +33,7 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
   const [assignments, setAssignments] = useState<Requisition[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<Requisition[]>([]);
   const [pendingAllocations, setPendingAllocations] = useState<Requisition[]>([]);
+  const [failedInspections, setFailedInspections] = useState<Requisition[]>([]);
   const [completedTrips, setCompletedTrips] = useState<Requisition[]>([]);
   const [loading, setLoading] = useState(false);
   const [ratingTrip, setRatingTrip] = useState<Requisition | null>(null);
@@ -66,7 +67,10 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
     if (activeTab === 'my-requests') loadRequests();
     if (activeTab === 'my-assignments') loadAssignments();
     if (activeTab === 'approvals') loadPendingApprovals();
-    if (activeTab === 'allocations') loadPendingAllocations();
+    if (activeTab === 'allocations') {
+      loadPendingAllocations();
+      loadFailedInspections();
+    }
     if (activeTab === 'completed') loadCompletedTrips();
   }, [activeTab]);
 
@@ -147,6 +151,23 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
       setPendingAllocations([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFailedInspections = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/requisitions?status=inspection_failed`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFailedInspections(Array.isArray(data) ? data : []);
+      } else {
+        setFailedInspections([]);
+      }
+    } catch (err) {
+      console.error('Failed to load failed inspections:', err);
+      setFailedInspections([]);
     }
   };
 
@@ -255,6 +276,25 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
       }
     } catch (err) {
       console.error('Inspection error:', err);
+    }
+  };
+
+  const handleRetryInspection = async (reqId: string) => {
+    try {
+      const res = await fetch(`${apiUrl}/requisitions/${reqId}/retry-inspection`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        loadAssignments();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to retry inspection');
+      }
+    } catch (err) {
+      console.error('Retry inspection error:', err);
+      alert('Network error. Please try again.');
     }
   };
 
@@ -426,10 +466,16 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
                 )}
                 
                 {req.status === 'inspection_failed' && (
-                  <div className="mt-4 pt-4 border-t">
+                  <div className="mt-4 pt-4 border-t space-y-2">
                     <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">
                       ❌ Inspection failed - Contact supervisor
                     </div>
+                    <button
+                      onClick={() => handleRetryInspection(req.id)}
+                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
+                    >
+                      🔄 Retry Inspection (After Fixes)
+                    </button>
                   </div>
                 )}
               </div>
@@ -484,22 +530,44 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
 
       {/* Allocations */}
       {activeTab === 'allocations' && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Pending Allocations</h3>
-          {loading ? (
-            <p className="text-center py-8">Loading...</p>
-          ) : pendingAllocations?.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No pending allocations</p>
-          ) : (
-            pendingAllocations?.map((req) => (
-              <AllocationCard 
-                key={req.id} 
-                req={req} 
-                apiUrl={apiUrl}
-                token={token}
-                onAllocate={() => loadPendingAllocations()}
-              />
-            ))
+        <div className="space-y-6">
+          {/* Pending Allocations */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Pending Allocations</h3>
+            {pendingAllocations?.length === 0 ? (
+              <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">No pending allocations</p>
+            ) : (
+              pendingAllocations?.map((req) => (
+                <AllocationCard 
+                  key={req.id} 
+                  req={req} 
+                  apiUrl={apiUrl}
+                  token={token}
+                  onAllocate={() => loadPendingAllocations()}
+                  mode="allocate"
+                />
+              ))
+            )}
+          </div>
+
+          {/* Failed Inspections - Need Reallocation */}
+          {failedInspections?.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-red-600">⚠️ Failed Inspections (Need Reallocation)</h3>
+              {failedInspections?.map((req) => (
+                <AllocationCard 
+                  key={req.id} 
+                  req={req} 
+                  apiUrl={apiUrl}
+                  token={token}
+                  onAllocate={() => {
+                    loadPendingAllocations();
+                    loadFailedInspections();
+                  }}
+                  mode="reallocate"
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -646,11 +714,12 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
 }
 
 // Allocation Card Component
-function AllocationCard({ req, apiUrl, token, onAllocate }: { 
+function AllocationCard({ req, apiUrl, token, onAllocate, mode = 'allocate' }: { 
   req: Requisition; 
   apiUrl: string; 
   token: string | null;
   onAllocate: () => void;
+  mode?: 'allocate' | 'reallocate';
 }) {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -686,8 +755,10 @@ function AllocationCard({ req, apiUrl, token, onAllocate }: {
     setLoading(true);
     setError('');
     
+    const endpoint = mode === 'reallocate' ? 'reallocate' : 'allocate';
+    
     try {
-      const res = await fetch(`${apiUrl}/requisitions/${req.id}/allocate`, {
+      const res = await fetch(`${apiUrl}/requisitions/${req.id}/${endpoint}`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -697,13 +768,16 @@ function AllocationCard({ req, apiUrl, token, onAllocate }: {
       });
       
       if (res.ok) {
+        setShowAllocate(false);
+        setSelectedVehicle('');
+        setSelectedDriver('');
         onAllocate();
       } else {
         const data = await res.json();
-        setError(data.error || 'Failed to allocate');
+        setError(data.error || `Failed to ${mode}`);
       }
     } catch (err) {
-      console.error('Allocate error:', err);
+      console.error(`${mode} error:`, err);
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
@@ -718,13 +792,18 @@ function AllocationCard({ req, apiUrl, token, onAllocate }: {
           <p className="text-gray-600">{req.place_of_departure} → {req.destination}</p>
           <p className="text-sm text-gray-500">{req.travel_date} {req.travel_time}</p>
           <p className="text-sm text-gray-500">Requested by: {req.requester_name}</p>
+          {mode === 'reallocate' && req.registration_num && (
+            <p className="text-sm text-red-600">Failed Vehicle: {req.registration_num}</p>
+          )}
         </div>
         {!showAllocate ? (
           <button
             onClick={() => { setShowAllocate(true); loadVehiclesAndDrivers(); }}
-            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+            className={`px-3 py-1 rounded text-sm text-white ${
+              mode === 'reallocate' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
-            Allocate
+            {mode === 'reallocate' ? 'Reallocate' : 'Allocate'}
           </button>
         ) : null}
       </div>
@@ -733,6 +812,11 @@ function AllocationCard({ req, apiUrl, token, onAllocate }: {
         <div className="mt-4 space-y-3 border-t pt-4">
           {error && (
             <div className="bg-red-50 text-red-600 p-2 rounded text-sm">{error}</div>
+          )}
+          {mode === 'reallocate' && (
+            <div className="bg-yellow-50 text-yellow-800 p-2 rounded text-sm">
+              ⚠️ Select a different vehicle/driver for this trip
+            </div>
           )}
           <div>
             <label className="block text-sm font-medium mb-1">Select Vehicle</label>
@@ -773,9 +857,12 @@ function AllocationCard({ req, apiUrl, token, onAllocate }: {
             <button
               onClick={handleAllocate}
               disabled={!selectedVehicle || !selectedDriver || loading}
-              className="px-3 py-1 bg-green-600 text-white rounded text-sm disabled:bg-gray-400"
+              className={`px-3 py-1 text-white rounded text-sm disabled:bg-gray-400 ${
+                mode === 'reallocate' ? 'bg-red-600' : 'bg-green-600'
+              }`}
             >
-              {loading ? 'Allocating...' : 'Confirm Allocation'}
+              {loading ? (mode === 'reallocate' ? 'Reallocating...' : 'Allocating...') : 
+               (mode === 'reallocate' ? 'Confirm Reallocation' : 'Confirm Allocation')}
             </button>
           </div>
         </div>

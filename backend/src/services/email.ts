@@ -197,10 +197,46 @@ export const sendTripCompleted = async (staffName: string, vehicleReg: string, d
   }
 };
 
+// Send maintenance notification (when inspection fails)
+export const sendMaintenanceNotification = async (vehicleReg: string, driverName: string, defects: string) => {
+  if (!transporter) {
+    console.log(`📧 Email (logged): MAINTENANCE NEEDED for ${vehicleReg}: ${defects}`);
+    return { success: true };
+  }
+
+  const mailOptions = {
+    from: '"Fleet System" <fleet@system.com>',
+    to: OWNER_EMAIL,
+    subject: `🚨 MAINTENANCE REQUIRED: ${vehicleReg}`,
+    html: `
+      <h2 style="color: #dc2626;">🚨 Maintenance Required</h2>
+      <p><strong>Vehicle:</strong> ${vehicleReg}</p>
+      <p><strong>Reported By:</strong> ${driverName}</p>
+      <p><strong>Issue:</strong></p>
+      <div style="background: #fee2e2; padding: 10px; border-radius: 5px; margin: 10px 0;">
+        ${defects}
+      </div>
+      <hr>
+      <p><strong>Action Required:</strong> Please arrange for vehicle inspection/repair before next use.</p>
+      <p>Trip has been halted until vehicle is fixed and re-inspected.</p>
+    `
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Maintenance email sent:', info.messageId);
+    return { success: true };
+  } catch (error) {
+    console.error('Maintenance email failed:', error);
+    return { success: false };
+  }
+};
+
 export default {
   sendRequisitionRequest,
   sendApprovalNotification,
   sendVehicleAllocated,
   sendInspectionNotification,
-  sendTripCompleted
+  sendTripCompleted,
+  sendMaintenanceNotification
 };
