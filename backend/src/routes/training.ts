@@ -8,6 +8,60 @@ const router = Router();
 const PASSING_SCORE = 70;
 const MAX_ATTEMPTS = 3;
 
+// ========== COURSES ==========
+
+// Get all courses
+router.get('/courses', async (req, res) => {
+  try {
+    const { category, mandatory } = req.query;
+    
+    let sql = 'SELECT * FROM training_courses WHERE 1=1';
+    const params: any[] = [];
+    let paramIndex = 1;
+    
+    if (category) {
+      sql += ` AND category = $${paramIndex}`;
+      params.push(category);
+      paramIndex++;
+    }
+    
+    if (mandatory === 'true') {
+      sql += ' AND mandatory = true';
+    }
+    
+    sql += ' ORDER BY mandatory DESC, course_name';
+    
+    const courses = await query(sql, params);
+    res.json(courses);
+  } catch (error) {
+    console.error('Get courses error:', error);
+    res.status(500).json({ error: 'Failed to fetch courses' });
+  }
+});
+
+// Create new course (admin/manager only)
+router.post('/courses', async (req: any, res) => {
+  try {
+    const userRole = req.user?.role;
+    if (!['admin', 'manager', 'transport_supervisor'].includes(userRole)) {
+      return res.status(403).json({ error: 'Only managers can create courses' });
+    }
+    
+    const { course_code, course_name, description, category, duration_hours, validity_months, mandatory } = req.body;
+    
+    const courseId = uuidv4();
+    await query(`
+      INSERT INTO training_courses (id, course_code, course_name, description, category, duration_hours, validity_months, mandatory, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [courseId, course_code, course_name, description, category, duration_hours, validity_months || null, mandatory || false, req.user?.staffId]);
+    
+    res.status(201).json({ id: courseId, message: 'Course created' });
+  } catch (error: any) {
+    console.error('Create course error:', error);
+    res.status(500).json({ error: 'Failed to create course: ' + error.message });
+  }
+});
+
 // ========== COURSES WITH SLIDES ==========
 
 // Get course with slides
@@ -15,13 +69,13 @@ router.get('/courses/:id/full', async (req, res) => {
   const { id } = req.params;
   
   try {
-    const courseResult = await query('SELECT * FROM training_courses WHERE id = ?', [id]);
+    const courseResult = await query('SELECT * FROM training_courses WHERE id = $1', [id]);
     if (courseResult.length === 0) {
       return res.status(404).json({ error: 'Course not found' });
     }
     
     const slides = await query(
-      'SELECT * FROM training_slides WHERE course_id = ? ORDER BY slide_order',
+      'SELECT * FROM training_slides WHERE course_id = $1 ORDER BY slide_order',
       [id]
     );
     
@@ -39,7 +93,7 @@ router.post('/courses/:id/slides', async (req: any, res) => {
   
   try {
     const maxOrder = await query(
-      'SELECT MAX(slide_order) as max_order FROM training_slides WHERE course_id = ?',
+      'SELECT MAX(slide_order) as max_order FROM training_slides WHERE course_id = $1',
       [id]
     );
     const slideOrder = (maxOrder[0]?.max_order || 0) + 1;
@@ -47,7 +101,7 @@ router.post('/courses/:id/slides', async (req: any, res) => {
     const slideId = uuidv4();
     await query(`
       INSERT INTO training_slides (id, course_id, slide_order, title, content, media_url, duration_minutes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [slideId, id, slideOrder, title, content, media_url, duration_minutes || 5]);
     
     res.status(201).json({ id: slideId, message: 'Slide added' });
@@ -66,25 +120,18 @@ router.post('/courses/:id/generate-quiz', async (req: any, res) => {
   
   try {
     // Get course info and slides
-    const courseResult = await query('SELECT * FROM training_courses WHERE id = ?', [id]);
+    const courseResult = await query('SELECT * FROM training_courses WHERE id = $1', [id]);
     if (courseResult.length === 0) {
       return res.status(404).json({ error: 'Course not found' });
     }
     
     const course = courseResult[0];
     const slides = await query(
-      'SELECT title, content FROM training_slides WHERE course_id = ? ORDER BY slide_order',
+      'SELECT title, content FROM training_slides WHERE course_id = $1 ORDER BY slide_order',
       [id]
     );
     
-    // Build content for AI
-    const content = slides.map((s: any) => `${s.title}: ${s.content}`).join('\n\n');
-    
-    // Generate questions using Kimi
-    const searchQuery = `Generate ${num_questions} multiple choice quiz questions about "${course.course_name}" with content: ${content.substring(0, 2000)}. Format as JSON array: [{"question": "...", "options": {"A": "...", "B": "...", "C": "...", "D": "..."}, "correct": "A", "explanation": "..."}]`;
-    
-    // For now, generate sample questions based on course content
-    // In production, this would call the AI service
+    // Generate sample questions based on course content
     const generatedQuestions = await generateSampleQuestions(course, slides, num_questions);
     
     // Save questions to database
@@ -93,7 +140,7 @@ router.post('/courses/:id/generate-quiz', async (req: any, res) => {
       const questionId = uuidv4();
       await query(`
         INSERT INTO training_quiz_questions (id, course_id, question_text, option_a, option_b, option_c, option_d, correct_option, explanation)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `, [questionId, id, q.question, q.options.A, q.options.B, q.options.C, q.options.D, q.correct, q.explanation]);
       
       savedQuestions.push({ id: questionId, ...q });
@@ -140,14 +187,15 @@ router.get('/courses/:id/quiz', async (req: any, res) => {
   const { exclude_used, enrollment_id } = req.query;
   
   try {
-    let sql = 'SELECT * FROM training_quiz_questions WHERE course_id = ?';
+    let sql = 'SELECT * FROM training_quiz_questions WHERE course_id = $1';
     const params: any[] = [id];
+    let paramIndex = 2;
     
     if (exclude_used === 'true' && enrollment_id) {
       // Get questions already used in previous attempts
       const usedQuestions = await query(`
         SELECT answers FROM training_quiz_attempts 
-        WHERE enrollment_id = ? AND answers IS NOT NULL
+        WHERE enrollment_id = $1 AND answers IS NOT NULL
       `, [enrollment_id]);
       
       const usedIds = new Set();
@@ -158,8 +206,9 @@ router.get('/courses/:id/quiz', async (req: any, res) => {
       });
       
       if (usedIds.size > 0) {
-        sql += ` AND id NOT IN (${Array.from(usedIds).map(() => '?').join(',')})`;
+        sql += ` AND id NOT IN (${Array.from(usedIds).map((_, i) => `$${paramIndex + i}`).join(',')})`;
         params.push(...Array.from(usedIds));
+        paramIndex += usedIds.size;
       }
     }
     
@@ -194,14 +243,14 @@ router.post('/enroll', async (req: any, res) => {
   try {
     // Count slides
     const slideCount = await query(
-      'SELECT COUNT(*) as count FROM training_slides WHERE course_id = ?',
+      'SELECT COUNT(*) as count FROM training_slides WHERE course_id = $1',
       [course_id]
     );
     
     const id = uuidv4();
     await query(`
       INSERT INTO training_enrollments (id, staff_id, course_id, enrolled_by, total_slides, status)
-      VALUES (?, ?, ?, ?, ?, 'enrolled')
+      VALUES ($1, $2, $3, $4, $5, 'enrolled')
     `, [id, staff_id, course_id, enrolled_by, slideCount[0]?.count || 0]);
     
     res.status(201).json({ id, message: 'Enrolled successfully' });
@@ -222,7 +271,7 @@ router.get('/my-enrollments', async (req: any, res) => {
         (SELECT COUNT(*) FROM training_quiz_questions WHERE course_id = c.id) as has_quiz
       FROM training_enrollments e
       JOIN training_courses c ON c.id = e.course_id
-      WHERE e.staff_id = ?
+      WHERE e.staff_id = $1
       ORDER BY e.enrolled_at DESC
     `, [staffId]);
     
@@ -239,7 +288,7 @@ router.post('/enrollments/:id/progress', async (req: any, res) => {
   const { slide_number } = req.body;
   
   try {
-    const enrollment = await query('SELECT * FROM training_enrollments WHERE id = ?', [id]);
+    const enrollment = await query('SELECT * FROM training_enrollments WHERE id = $1', [id]);
     if (enrollment.length === 0) {
       return res.status(404).json({ error: 'Enrollment not found' });
     }
@@ -250,8 +299,8 @@ router.post('/enrollments/:id/progress', async (req: any, res) => {
     
     await query(`
       UPDATE training_enrollments 
-      SET current_slide = ?, completed_slides = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+      SET current_slide = $1, completed_slides = $2, status = $3, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $4
     `, [slide_number, newCompleted, status, id]);
     
     res.json({ message: 'Progress updated', status });
@@ -266,10 +315,10 @@ router.post('/enrollments/:id/progress', async (req: any, res) => {
 // Submit quiz attempt
 router.post('/enrollments/:id/quiz-submit', async (req: any, res) => {
   const { id } = req.params;
-  const { answers } = req.body; // { question_id: "A", ... }
+  const { answers } = req.body;
   
   try {
-    const enrollment = await query('SELECT * FROM training_enrollments WHERE id = ?', [id]);
+    const enrollment = await query('SELECT * FROM training_enrollments WHERE id = $1', [id]);
     if (enrollment.length === 0) {
       return res.status(404).json({ error: 'Enrollment not found' });
     }
@@ -283,14 +332,18 @@ router.post('/enrollments/:id/quiz-submit', async (req: any, res) => {
     
     // Check attempts
     if (e.quiz_attempts >= MAX_ATTEMPTS) {
-      await query("UPDATE training_enrollments SET status = 'locked', locked_at = CURRENT_TIMESTAMP, locked_reason = 'Maximum attempts exceeded' WHERE id = ?", [id]);
+      await query("UPDATE training_enrollments SET status = 'locked', locked_at = CURRENT_TIMESTAMP, locked_reason = 'Maximum attempts exceeded' WHERE id = $1", [id]);
       return res.status(403).json({ error: 'Maximum attempts reached. Contact your Transport Manager to unlock.' });
     }
     
     // Get correct answers
     const questionIds = Object.keys(answers);
+    if (questionIds.length === 0) {
+      return res.status(400).json({ error: 'No answers provided' });
+    }
+    
     const questions = await query(
-      `SELECT id, correct_option FROM training_quiz_questions WHERE id IN (${questionIds.map(() => '?').join(',')})`,
+      `SELECT id, correct_option FROM training_quiz_questions WHERE id IN (${questionIds.map((_, i) => `$${i + 1}`).join(',')})`,
       questionIds
     );
     
@@ -301,7 +354,7 @@ router.post('/enrollments/:id/quiz-submit', async (req: any, res) => {
     });
     
     const totalQuestions = questions.length;
-    const score = Math.round((correct / totalQuestions) * 100);
+    const score = totalQuestions > 0 ? Math.round((correct / totalQuestions) * 100) : 0;
     const passed = score >= PASSING_SCORE;
     
     const newAttemptNumber = e.quiz_attempts + 1;
@@ -310,23 +363,31 @@ router.post('/enrollments/:id/quiz-submit', async (req: any, res) => {
     const attemptId = uuidv4();
     await query(`
       INSERT INTO training_quiz_attempts (id, enrollment_id, attempt_number, completed_at, score, total_questions, correct_answers, passed, answers)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8)
     `, [attemptId, id, newAttemptNumber, score, totalQuestions, correct, passed, JSON.stringify(answers)]);
     
     // Update enrollment
-    let newStatus = passed ? 'passed' : (newAttemptNumber >= MAX_ATTEMPTS ? 'failed' : 'quiz_pending');
-    let lockUpdate = '';
+    let newStatus = passed ? 'passed' : (newAttemptNumber >= MAX_ATTEMPTS ? 'locked' : 'quiz_pending');
     
     if (newAttemptNumber >= MAX_ATTEMPTS && !passed) {
-      newStatus = 'locked';
-      lockUpdate = ', locked_at = CURRENT_TIMESTAMP, locked_reason = "Failed after 3 attempts"';
+      await query(`
+        UPDATE training_enrollments 
+        SET quiz_attempts = $1, last_quiz_score = $2, status = $3, locked_at = CURRENT_TIMESTAMP, locked_reason = 'Failed after 3 attempts'
+        WHERE id = $4
+      `, [newAttemptNumber, score, newStatus, id]);
+    } else if (passed) {
+      await query(`
+        UPDATE training_enrollments 
+        SET quiz_attempts = $1, last_quiz_score = $2, status = $3, passed_at = CURRENT_TIMESTAMP
+        WHERE id = $4
+      `, [newAttemptNumber, score, newStatus, id]);
+    } else {
+      await query(`
+        UPDATE training_enrollments 
+        SET quiz_attempts = $1, last_quiz_score = $2, status = $3
+        WHERE id = $4
+      `, [newAttemptNumber, score, newStatus, id]);
     }
-    
-    await query(`
-      UPDATE training_enrollments 
-      SET quiz_attempts = ?, last_quiz_score = ?, status = ?${passed ? ', passed_at = CURRENT_TIMESTAMP' : ''}${lockUpdate}
-      WHERE id = ?
-    `, [newAttemptNumber, score, newStatus, id]);
     
     // If passed, generate certificate
     if (passed) {
@@ -353,15 +414,15 @@ router.post('/enrollments/:id/quiz-submit', async (req: any, res) => {
 async function generateCertificate(enrollmentId: string, staffId: string, courseId: string, score: number) {
   try {
     // Get staff and course info
-    const staff = await query('SELECT staff_name FROM staff WHERE id = ?', [staffId]);
-    const course = await query('SELECT course_name, validity_months FROM training_courses WHERE id = ?', [courseId]);
+    const staff = await query('SELECT staff_name FROM staff WHERE id = $1', [staffId]);
+    const course = await query('SELECT course_name, validity_months FROM training_courses WHERE id = $1', [courseId]);
     
     if (staff.length === 0 || course.length === 0) return;
     
     // Generate certificate number
     const year = new Date().getFullYear();
     const countResult = await query(
-      'SELECT COUNT(*) as count FROM training_certificates WHERE EXTRACT(YEAR FROM issue_date) = ?',
+      'SELECT COUNT(*) as count FROM training_certificates WHERE EXTRACT(YEAR FROM issue_date) = $1',
       [year]
     );
     const count = parseInt(countResult[0].count) + 1;
@@ -377,7 +438,7 @@ async function generateCertificate(enrollmentId: string, staffId: string, course
     const certId = uuidv4();
     await query(`
       INSERT INTO training_certificates (id, certificate_number, enrollment_id, staff_id, course_id, issue_date, expiry_date, score)
-      VALUES (?, ?, ?, ?, ?, CURRENT_DATE, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6, $7)
     `, [certId, certNumber, enrollmentId, staffId, courseId, expiryDate, score]);
     
     return certNumber;
@@ -396,7 +457,7 @@ router.get('/my-certificates', async (req: any, res) => {
         tc.course_name, tc.course_code, tc.category
       FROM training_certificates c
       JOIN training_courses tc ON tc.id = c.course_id
-      WHERE c.staff_id = ?
+      WHERE c.staff_id = $1
       ORDER BY c.issue_date DESC
     `, [staffId]);
     
@@ -419,7 +480,7 @@ router.get('/certificates/:id/data', async (req: any, res) => {
       FROM training_certificates c
       JOIN staff s ON s.id = c.staff_id
       JOIN training_courses tc ON tc.id = c.course_id
-      WHERE c.id = ? OR c.certificate_number = ?
+      WHERE c.id = $1 OR c.certificate_number = $2
     `, [id, id]);
     
     if (result.length === 0) {
@@ -472,10 +533,10 @@ router.post('/enrollments/:id/unlock', async (req: any, res) => {
       UPDATE training_enrollments 
       SET status = 'quiz_pending', 
           quiz_attempts = 0,
-          unlocked_by = ?, 
+          unlocked_by = $1, 
           unlocked_at = CURRENT_TIMESTAMP,
           locked_reason = NULL
-      WHERE id = ?
+      WHERE id = $2
     `, [unlockedBy, id]);
     
     res.json({ message: 'Training unlocked successfully' });
