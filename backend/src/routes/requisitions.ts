@@ -77,7 +77,7 @@ router.post('/', async (req, res) => {
 
 // Get my requisitions
 router.get('/my-requests', async (req: any, res) => {
-  const userId = req.user?.id;
+  const userId = req.user?.userId;
   
   try {
     const result = await query(`
@@ -136,7 +136,7 @@ router.get('/pending-approvals', async (req: any, res) => {
 router.post('/:id/approve', async (req: any, res) => {
   const { id } = req.params;
   const { status, reason } = req.body; // status: 'approved' or 'rejected'
-  const approverId = req.user?.id;
+  const approverId = req.user?.userId;
 
   try {
     await query(`
@@ -168,7 +168,7 @@ router.post('/:id/approve', async (req: any, res) => {
 router.post('/:id/allocate', async (req: any, res) => {
   const { id } = req.params;
   const { vehicle_id, driver_id } = req.body;
-  const allocatedBy = req.user?.id;
+  const allocatedBy = req.user?.userId;
 
   try {
     await query(`
@@ -258,7 +258,7 @@ router.post('/:id/inspection', async (req: any, res) => {
 router.post('/:id/close', async (req: any, res) => {
   const { id } = req.params;
   const { ending_odometer } = req.body;
-  const closedBy = req.user?.id;
+  const closedBy = req.user?.userId;
 
   try {
     // Get starting odometer
