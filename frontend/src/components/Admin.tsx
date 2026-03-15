@@ -14,6 +14,7 @@ interface User {
 export default function Admin({ apiUrl }: AdminProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -23,7 +24,7 @@ export default function Admin({ apiUrl }: AdminProps) {
   const token = localStorage.getItem('token');
 
   useEffect(() => {
-    fetchUsers();
+    fetchUsers().then(() => setLoading(false));
   }, []);
 
   const fetchUsers = async () => {
@@ -31,12 +32,26 @@ export default function Admin({ apiUrl }: AdminProps) {
       const res = await fetch(`${apiUrl}/admin/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data);
+      
+      if (res.status === 403) {
+        setMessage('Error: You do not have admin permissions');
+        return;
       }
-    } catch (err) {
-      console.error('Failed to fetch users');
+      
+      if (!res.ok) {
+        const error = await res.json();
+        setMessage('Error: ' + (error.error || 'Failed to fetch users'));
+        return;
+      }
+      
+      const data = await res.json();
+      setUsers(data);
+      
+      if (data.length === 0) {
+        setMessage('No users found in database. Only default admin exists.');
+      }
+    } catch (err: any) {
+      setMessage('Network error: ' + err.message);
     }
   };
 
@@ -81,10 +96,19 @@ export default function Admin({ apiUrl }: AdminProps) {
       </div>
 
       {message && (
-        <div className={`p-4 rounded-lg mb-4 ${message.includes('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+        <div className={`p-4 rounded-lg mb-4 ${message.includes('Error') ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}`}>
           {message}
         </div>
       )}
+
+      {/* Default Admin Info */}
+      <div className="bg-yellow-50 p-4 rounded-lg mb-6">
+        <h3 className="font-semibold text-yellow-800 mb-2">Default Admin Login</h3>
+        <p className="text-yellow-700 text-sm">Email: admin@fleet.local</p>
+        <p className="text-yellow-700 text-sm">Password: admin123</p>
+      </div>
+
+      {loading && <div className="text-center py-8">Loading users...</div>}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow mb-6">

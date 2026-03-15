@@ -7,10 +7,13 @@ const router = Router();
 // Get all users (admin only)
 router.get('/users', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
+    console.log('Admin users request from:', req.user?.email, 'with role:', req.user?.role);
     const users = await query('SELECT id, email, role, created_at FROM users ORDER BY created_at DESC');
+    console.log('Found users:', users.length);
     res.json(users);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch users' });
+  } catch (error: any) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: 'Failed to fetch users', details: error.message });
   }
 });
 
