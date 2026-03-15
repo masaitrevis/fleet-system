@@ -298,11 +298,11 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
         </div>
 
         <div className="space-y-6">
-          {Object.entries(groupedQuestions).map(([module, responses]: [string, any]) => (
+          {Object.entries(groupedQuestions || {}).map(([module, responses]: [string, any]) => (
             <div key={module} className="bg-white p-6 rounded-xl shadow">
               <h3 className="text-lg font-semibold mb-4 text-blue-800">{module}</h3>
               <div className="space-y-4">
-                {responses.map((r: any, idx: number) => (
+                {responses?.map((r: any, idx: number) => (
                   <div key={r.id} className="border-b pb-4 last:border-0">
                     <p className="font-medium mb-2">{idx + 1}. {r.question_text}</p>
                     <div className="flex flex-wrap gap-2">
@@ -392,9 +392,9 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
         </div>
 
         <div className="space-y-6">
-          {Object.entries(groupedResponses).map(([module, responses]: [string, any]) => {
-            const moduleScore = responses.reduce((sum: number, r: any) => sum + (r.score > 0 ? r.score : 0), 0);
-            const moduleMax = responses.reduce((sum: number, r: any) => sum + (r.score >= 0 ? r.max_score : 0), 0);
+          {Object.entries(groupedResponses || {}).map(([module, responses]: [string, any]) => {
+            const moduleScore = responses?.reduce((sum: number, r: any) => sum + (r.score > 0 ? r.score : 0), 0) || 0;
+            const moduleMax = responses?.reduce((sum: number, r: any) => sum + (r.score >= 0 ? r.max_score : 0), 0) || 0;
             const percentage = moduleMax > 0 ? (moduleScore / moduleMax) * 100 : 0;
 
             return (
@@ -411,7 +411,7 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
                   </span>
                 </div>
                 <div className="space-y-3">
-                  {responses.map((r: any, idx: number) => (
+                  {responses?.map((r: any, idx: number) => (
                     <div key={r.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
                       <div>
                         <p className="text-sm">{idx + 1}. {r.question_text}</p>
@@ -437,7 +437,7 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
           <div className="bg-white p-6 rounded-xl shadow">
             <h3 className="text-lg font-semibold mb-4">📝 Corrective Actions</h3>
             <div className="space-y-3">
-              {selectedSession.correctiveActions.map((action: any) => (
+              {selectedSession.correctiveActions?.map((action: any) => (
                 <div key={action.id} className="border p-4 rounded-lg">
                   <p className="font-medium">{action.issue_identified}</p>
                   <div className="flex gap-4 text-sm mt-2">

@@ -132,7 +132,7 @@ export default function Repairs({ apiUrl }: RepairsProps) {
             
             <select value={formData.vehicle_id} onChange={e => setFormData({...formData, vehicle_id: e.target.value})} className="border p-2 rounded" required>
               <option value="">Select Vehicle</option>
-              {vehicles.map(v => <option key={v.id} value={v.id}>{v.registration_num}</option>)}
+              {vehicles?.map(v => <option key={v.id} value={v.id}>{v.registration_num}</option>)}
             </select>
             
             <input placeholder="Odometer Reading" type="number" value={formData.odometer_reading} onChange={e => setFormData({...formData, odometer_reading: e.target.value})} className="border p-2 rounded" required />
@@ -184,7 +184,7 @@ export default function Repairs({ apiUrl }: RepairsProps) {
             </tr>
           </thead>
           <tbody>
-            {repairs.map(r => (
+            {repairs?.map(r => (
               <tr key={r.id} className="border-b hover:bg-gray-50">
                 <td className="p-4">{r.date_in}</td>
                 <td className="p-4 font-medium">{r.registration_num}</td>

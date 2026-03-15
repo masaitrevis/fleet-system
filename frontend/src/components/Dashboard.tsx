@@ -186,7 +186,7 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {statCards.map((card, i) => (
+        {statCards?.map((card, i) => (
           <div key={i} className={`${card.color} rounded-xl p-6 text-white shadow-lg`}>
             <div className="text-4xl mb-2">{card.icon}</div>
             <div className="text-3xl font-bold">{card.value}</div>
@@ -212,7 +212,7 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
                 fill="#8884d8"
                 dataKey="value"
               >
-                {fleetStatusData.map((entry, index) => (
+                {fleetStatusData?.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
@@ -291,7 +291,7 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
                     paddingAngle={5}
                     dataKey="cost"
                   >
-                    {fuelData.map((_entry, index) => (
+                    {fuelData?.map((_entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -318,7 +318,7 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
                 </tr>
               </thead>
               <tbody>
-                {stats.maintenanceDue.map((v, i) => (
+                {stats.maintenanceDue?.map((v, i) => (
                   <tr key={i} className="border-b">
                     <td className="p-3 font-medium">{v.registration_num}</td>
                     <td className="p-3">{v.make_model}</td>

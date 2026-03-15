@@ -175,7 +175,7 @@ export default function Routes({ apiUrl }: RoutesProps) {
                 required
               >
                 <option value="">Select Vehicle</option>
-                {vehicles.map(v => <option key={v.id} value={v.id}>{v.registration_num}</option>)}
+                {vehicles?.map(v => <option key={v.id} value={v.id}>{v.registration_num}</option>)}
               </select>
             </div>
             

@@ -199,53 +199,85 @@ export default function Reports({ apiUrl }: ReportsProps) {
   };
 
   const exportToPDF = () => {
-    const doc = new jsPDF();
-    
-    let title = '';
-    let headers: string[] = [];
-    let data: any[][] = [];
+    try {
+      const doc = new jsPDF();
+      
+      let title = '';
+      let headers: string[] = [];
+      let data: any[][] = [];
 
-    switch (reportType) {
-      case 'fleet':
-        title = 'Fleet Report';
-        headers = ['Registration', 'Make/Model', 'Status', 'Mileage'];
-        data = (vehicles || []).map(v => [v.registration_num, v.make_model, v.status, v.current_mileage]);
-        break;
-      case 'fuel':
-        title = 'Fuel Report';
-        headers = ['Date', 'Vehicle', 'Distance', 'Fuel', 'Efficiency', 'Cost'];
-        data = filterByDateRange(fuelRecords || [], 'fuel_date').map(f => [f.fuel_date, f.registration_num, f.distance_km, f.quantity_liters, f.km_per_liter, f.amount]);
-        break;
-      case 'routes':
-        title = 'Route History Report';
-        headers = ['Date', 'Vehicle', 'From', 'To', 'Distance', 'Status'];
-        data = filterByDateRange(routes || [], 'route_date').map(r => [r.route_date, r.registration_num || r.vehicle_id, r.start_location, r.destination, r.distance_km, r.status]);
-        break;
-      case 'repairs':
-        title = 'Maintenance Report';
-        headers = ['Date', 'Vehicle', 'Type', 'Provider', 'Cost', 'Status'];
-        data = filterByDateRange(repairs || [], 'repair_date').map(r => [r.repair_date, r.registration_num, r.repair_type, r.service_provider, r.cost, r.status]);
-        break;
+      switch (reportType) {
+        case 'fleet':
+          title = 'Fleet Report';
+          headers = ['Registration', 'Make/Model', 'Status', 'Mileage'];
+          data = (vehicles || []).map(v => [v.registration_num || '-', v.make_model || '-', v.status || '-', v.current_mileage || 0]);
+          break;
+        case 'fuel':
+          title = 'Fuel Report';
+          headers = ['Date', 'Vehicle', 'Distance', 'Fuel', 'Efficiency', 'Cost'];
+          data = filterByDateRange(fuelRecords || [], 'fuel_date').map(f => [
+            f.fuel_date || '-', 
+            f.registration_num || '-', 
+            f.distance_km || 0, 
+            f.quantity_liters || 0, 
+            f.km_per_liter ? f.km_per_liter.toFixed(2) : '-', 
+            f.amount || 0
+          ]);
+          break;
+        case 'routes':
+          title = 'Route History Report';
+          headers = ['Date', 'Vehicle', 'From', 'To', 'Distance', 'Status'];
+          data = filterByDateRange(routes || [], 'route_date').map(r => [
+            r.route_date || '-', 
+            r.registration_num || r.vehicle_id || '-', 
+            r.start_location || '-', 
+            r.destination || '-', 
+            r.distance_km || 0, 
+            r.status || '-'
+          ]);
+          break;
+        case 'repairs':
+          title = 'Maintenance Report';
+          headers = ['Date', 'Vehicle', 'Type', 'Provider', 'Cost', 'Status'];
+          data = filterByDateRange(repairs || [], 'repair_date').map(r => [
+            r.repair_date || '-', 
+            r.registration_num || '-', 
+            r.repair_type || '-', 
+            r.service_provider || '-', 
+            r.cost || 0, 
+            r.status || '-'
+          ]);
+          break;
+      }
+
+      if (data.length === 0) {
+        alert('No data to export');
+        return;
+      }
+
+      // Add title and metadata
+      doc.setFontSize(16);
+      doc.text(title, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 25);
+      doc.text(`Period: ${dateRange === 'all' ? 'All Time' : `Last ${dateRange} days`}`, 14, 32);
+      
+      // Use autoTable
+      (doc as any).autoTable({
+        head: [headers],
+        body: data,
+        startY: 40,
+        theme: 'grid',
+        headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+        styles: { fontSize: 9 },
+        margin: { top: 40 }
+      });
+
+      doc.save(`${reportType}-report.pdf`);
+    } catch (err: any) {
+      console.error('PDF Export Error:', err);
+      alert('Failed to generate PDF: ' + (err.message || 'Unknown error'));
     }
-
-    if (data.length === 0) {
-      alert('No data to export');
-      return;
-    }
-
-    doc.text(title, 14, 15);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 25);
-    doc.text(`Period: ${dateRange === 'all' ? 'All Time' : `Last ${dateRange} days`}`, 14, 32);
-    
-    (doc as any).autoTable({
-      head: [headers],
-      body: data,
-      startY: 40,
-      theme: 'grid',
-      headStyles: { fillColor: [37, 99, 235] }
-    });
-
-    doc.save(`${reportType}-report.pdf`);
   };
 
   const getFilteredData = () => {
