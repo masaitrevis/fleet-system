@@ -8,7 +8,7 @@ interface RequisitionModuleProps {
 
 export default function RequisitionModule({ apiUrl, user }: RequisitionModuleProps) {
   const [activeTab, setActiveTab] = useState('request');
-  const [requests, setRequests] = useState([]);
+  const [requests, setRequests] = useState<any[]>([]);
   const token = localStorage.getItem('token');
 
   const loadRequests = async () => {
@@ -18,10 +18,14 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
       });
       if (res.ok) {
         const data = await res.json();
-        setRequests(data);
+        setRequests(Array.isArray(data) ? data : []);
+      } else {
+        console.error('Failed to load requests:', await res.text());
+        setRequests([]);
       }
     } catch (err) {
-      console.error('Failed to load requests');
+      console.error('Failed to load requests:', err);
+      setRequests([]);
     }
   };
 
@@ -50,15 +54,18 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
 
       {activeTab === 'my-requests' && (
         <div className="space-y-4">
-          {requests.map((req: any) => (
-            <div key={req.id} className="bg-white rounded-xl shadow-sm border p-4">
-              <p className="font-bold">{req.request_no}</p>
-              <p className="text-gray-600">{req.place_of_departure} → {req.destination}</p>
-              <p className="text-sm text-gray-500">{req.travel_date}</p>
-              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">{req.status}</span>
-            </div>
-          ))}
-          {requests.length === 0 && <p className="text-gray-500 text-center py-8">No requests found</p>}
+          {requests?.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No requests found</p>
+          ) : (
+            requests?.map((req: any) => (
+              <div key={req.id} className="bg-white rounded-xl shadow-sm border p-4">
+                <p className="font-bold">{req.request_no}</p>
+                <p className="text-gray-600">{req.place_of_departure} → {req.destination}</p>
+                <p className="text-sm text-gray-500">{req.travel_date}</p>
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">{req.status}</span>
+              </div>
+            ))
+          )}
         </div>
       )}
 
