@@ -12,13 +12,14 @@ import Reports from './components/Reports';
 import Analytics from './components/Analytics';
 import Accidents from './components/Accidents';
 import Audits from './components/Audits';
+import Training from './components/Training';
 import RequisitionModule from './components/requisition/RequisitionModule';
 import SecurityDashboard from './components/SecurityDashboard';
 import { getEffectiveRole } from './utils/roles';
 
 import Admin from './components/Admin';
 
-export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'requisitions' | 'security' | 'admin';
+export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'training' | 'requisitions' | 'security' | 'admin';
 
 // Force correct API URL - env vars not reliable in Netlify
 const API_URL = 'https://fleet-api-0272.onrender.com/api';
@@ -38,6 +39,7 @@ function AppContent() {
     { key: 'requisitions', label: 'Requisitions', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod'] },
     { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'hod', 'security'] },
     { key: 'audits', label: 'Audits', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer', 'transport_supervisor', 'hod'] },
+    { key: 'training', label: 'Training', icon: '🎓', roles: ['admin', 'manager', 'hod'] },
     { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
     { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager', 'hod'] },
     { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
@@ -65,6 +67,7 @@ function AppContent() {
       case 'requisitions': return <RequisitionModule apiUrl={API_URL} user={user} />;
       case 'accidents': return <Accidents apiUrl={API_URL} user={user} />;
       case 'audits': return <Audits apiUrl={API_URL} user={user} />;
+      case 'training': return <Training apiUrl={API_URL} user={user} />;
       case 'fleet': return <Fleet apiUrl={API_URL} />;
       case 'staff': return <Staff apiUrl={API_URL} />;
       case 'routes': return <Routes apiUrl={API_URL} />;

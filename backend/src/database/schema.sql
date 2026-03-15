@@ -136,3 +136,80 @@ CREATE INDEX idx_fuel_vehicle ON fuel_records(vehicle_id);
 CREATE INDEX idx_fuel_date ON fuel_records(fuel_date);
 CREATE INDEX idx_repairs_vehicle ON repairs(vehicle_id);
 CREATE INDEX idx_repairs_status ON repairs(status);
+-- ============================================
+-- TRAINING MODULE
+-- ============================================
+
+-- Training Courses/Certifications table
+CREATE TABLE IF NOT EXISTS training_courses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_code VARCHAR(50) UNIQUE NOT NULL,
+    course_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(100),
+    duration_hours INTEGER,
+    validity_months INTEGER,
+    mandatory BOOLEAN DEFAULT false,
+    provider VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Staff Training Records
+CREATE TABLE IF NOT EXISTS staff_training (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    staff_id UUID REFERENCES staff(id) ON DELETE CASCADE,
+    course_id UUID REFERENCES training_courses(id) ON DELETE CASCADE,
+    completion_date DATE NOT NULL,
+    expiry_date DATE,
+    score DECIMAL(5,2),
+    status VARCHAR(50) DEFAULT 'Active',
+    certificate_number VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for training
+CREATE INDEX IF NOT EXISTS idx_staff_training_staff ON staff_training(staff_id);
+CREATE INDEX IF NOT EXISTS idx_staff_training_expiry ON staff_training(expiry_date);
+
+-- ============================================
+-- RECURRING AUDITS
+-- ============================================
+
+-- Recurring Audit Schedules
+CREATE TABLE IF NOT EXISTS audit_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_id UUID REFERENCES audit_templates(id) ON DELETE CASCADE,
+    schedule_name VARCHAR(255) NOT NULL,
+    frequency VARCHAR(50) NOT NULL,
+    day_of_week INTEGER,
+    day_of_month INTEGER,
+    start_date DATE NOT NULL,
+    end_date DATE,
+    auditor_id UUID REFERENCES staff(id),
+    branch VARCHAR(100),
+    is_active BOOLEAN DEFAULT true,
+    last_run_at TIMESTAMP,
+    next_run_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for recurring audits
+CREATE INDEX IF NOT EXISTS idx_audit_schedules_active ON audit_schedules(is_active);
+CREATE INDEX IF NOT EXISTS idx_audit_schedules_next_run ON audit_schedules(next_run_at);
+
+-- ============================================
+-- PRE-BUILT AUDIT TEMPLATES
+-- ============================================
+
+-- DVIR (Driver Vehicle Inspection Report) Template
+INSERT INTO audit_templates (id, template_name, description, is_active, created_by) 
+VALUES ('550e8400-e29b-41d4-a716-446655440000', 'DVIR - Daily Vehicle Inspection', 'Daily pre-trip and post-trip vehicle inspection checklist', true, NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- DOT Inspection Template  
+INSERT INTO audit_templates (id, template_name, description, is_active, created_by)
+VALUES ('550e8400-e29b-41d4-a716-446655440001', 'DOT - 6-Month Inspection', 'DOT mandated semi-annual vehicle inspection', true, NULL)
+ON CONFLICT (id) DO NOTHING;

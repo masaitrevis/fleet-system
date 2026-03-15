@@ -19,6 +19,8 @@ import analyticsRoutes from './routes/analytics';
 import requisitionRoutes from './routes/requisitions';
 import accidentRoutes from './routes/accidents';
 import auditRoutes from './routes/audits';
+import trainingRoutes from './routes/training';
+import auditScheduleRoutes from './routes/audit-schedules';
 
 dotenv.config();
 
@@ -64,6 +66,8 @@ app.use('/api/analytics', authenticateToken, analyticsRoutes);
 app.use('/api/requisitions', authenticateToken, requisitionRoutes);
 app.use('/api/accidents', authenticateToken, accidentRoutes);
 app.use('/api/audits', authenticateToken, auditRoutes);
+app.use('/api/training', authenticateToken, trainingRoutes);
+app.use('/api/audit-schedules', authenticateToken, auditScheduleRoutes);
 
 // Health check (public)
 app.get('/api/health', (req, res) => {
