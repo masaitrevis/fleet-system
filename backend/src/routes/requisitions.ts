@@ -221,12 +221,13 @@ router.get('/my-assignments', async (req: any, res) => {
 // Approve/Reject requisition
 router.post('/:id/approve', async (req: any, res) => {
   const { id } = req.params;
-  const { status, reason } = req.body; // status: 'approved' or 'rejected'
-  const approverId = req.user?.userId;
+  const { status, reason } = req.body;
+  const userId = req.user?.userId;
+  const staffId = req.user?.staffId;
   
-  console.log('Approve request:', { id, status, approverId, user: req.user });
+  console.log('Approve request:', { id, status, userId, staffId, user: req.user });
 
-  if (!approverId) {
+  if (!userId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
@@ -240,6 +241,10 @@ router.post('/:id/approve', async (req: any, res) => {
     if (checkResult[0].status !== 'pending') {
       return res.status(400).json({ error: 'Requisition is not pending' });
     }
+
+    // Use staffId if available (for staff users), otherwise use userId (for admin/manager without staff record)
+    // Note: approved_by references staff(id), so if manager has no staff record, we use NULL
+    const approverId = staffId || null;
 
     await query(`
       UPDATE requisitions 
@@ -256,15 +261,14 @@ router.post('/:id/approve', async (req: any, res) => {
     `, [id]);
 
     if (result.length > 0) {
-      // Non-blocking email
       emailService.sendApprovalNotification(result[0].staff_name, status, reason)
         .catch((err: any) => console.error('Email failed:', err));
     }
 
     res.json({ message: `Requisition ${status}`, requisition: result[0] });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Approve requisition error:', error);
-    res.status(500).json({ error: 'Failed to update requisition' });
+    res.status(500).json({ error: 'Failed to update requisition: ' + (error.message || 'Unknown error') });
   }
 });
 
