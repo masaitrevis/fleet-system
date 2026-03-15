@@ -41,21 +41,41 @@ export default function Fuel({ apiUrl }: FuelProps) {
     place: ''
   });
 
-  const token = localStorage.getItem('token');
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   useEffect(() => {
-    fetchRecords();
-    fetchVehicles();
+    if (apiUrl && token) {
+      fetchRecords();
+      fetchVehicles();
+    } else {
+      setLoading(false);
+      if (!token) {
+        setError('Authentication required. Please login.');
+      }
+    }
   }, [apiUrl]);
 
   const fetchRecords = async () => {
     setLoading(true);
     setError('');
     try {
+      const currentToken = localStorage.getItem('token');
+      if (!currentToken) {
+        throw new Error('No authentication token');
+      }
+      
       const res = await fetch(`${apiUrl}/fuel`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${currentToken}` }
       });
-      if (!res.ok) throw new Error('Failed to fetch fuel records');
+      
+      if (res.status === 401 || res.status === 403) {
+        throw new Error('Session expired. Please logout and login again.');
+      }
+      
+      if (!res.ok) {
+        throw new Error(`Failed to fetch fuel records: ${res.status}`);
+      }
+      
       const data = await res.json();
       setRecords(Array.isArray(data) ? data : []);
     } catch (err: any) {
@@ -69,10 +89,19 @@ export default function Fuel({ apiUrl }: FuelProps) {
 
   const fetchVehicles = async () => {
     try {
+      const currentToken = localStorage.getItem('token');
+      if (!currentToken) return;
+      
       const res = await fetch(`${apiUrl}/vehicles`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${currentToken}` }
       });
-      if (!res.ok) throw new Error('Failed to fetch vehicles');
+      
+      if (!res.ok) {
+        console.error('Vehicles fetch failed:', res.status);
+        setVehicles([]);
+        return;
+      }
+      
       const data = await res.json();
       setVehicles(Array.isArray(data) ? data : []);
     } catch (err: any) {
@@ -82,7 +111,16 @@ export default function Fuel({ apiUrl }: FuelProps) {
   };
 
   const handleVehicleChange = (vehicleId: string) => {
-    const vehicle = vehicles?.find(v => v.id === vehicleId);
+    if (!vehicleId) {
+      setFormData(prev => ({
+        ...prev,
+        vehicle_id: '',
+        past_mileage: ''
+      }));
+      return;
+    }
+    
+    const vehicle = vehicles?.find(v => v?.id === vehicleId);
     setFormData(prev => ({
       ...prev,
       vehicle_id: vehicleId,
@@ -94,12 +132,18 @@ export default function Fuel({ apiUrl }: FuelProps) {
     e.preventDefault();
     setError('');
     
+    const currentToken = localStorage.getItem('token');
+    if (!currentToken) {
+      setError('Authentication required. Please login again.');
+      return;
+    }
+    
     try {
       const res = await fetch(`${apiUrl}/fuel`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${currentToken}`
         },
         body: JSON.stringify({
           fuel_date: formData.fuel_date,
@@ -114,13 +158,16 @@ export default function Fuel({ apiUrl }: FuelProps) {
         })
       });
       
+      if (res.status === 401 || res.status === 403) {
+        throw new Error('Session expired. Please logout and login again.');
+      }
+      
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to save fuel record');
+        throw new Error(errData.error || `Failed to save: ${res.status}`);
       }
       
       setShowForm(false);
-      // Reset form
       setFormData({
         fuel_date: new Date().toISOString().split('T')[0],
         vehicle_id: '',
@@ -138,6 +185,11 @@ export default function Fuel({ apiUrl }: FuelProps) {
       console.error('Fuel submit error:', err);
       setError(err.message || 'Failed to save fuel record');
     }
+  };
+
+  const handleReLogin = () => {
+    localStorage.removeItem('token');
+    window.location.reload();
   };
 
   if (loading && records.length === 0) {
@@ -162,7 +214,15 @@ export default function Fuel({ apiUrl }: FuelProps) {
 
       {error && (
         <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
-          {error}
+          <p>{error}</p>
+          {(error.includes('expired') || error.includes('token') || error.includes('Authentication')) && (
+            <button
+              onClick={handleReLogin}
+              className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+            >
+              🔑 Click to Re-Login
+            </button>
+          )}
         </div>
       )}
 
@@ -190,7 +250,7 @@ export default function Fuel({ apiUrl }: FuelProps) {
               >
                 <option value="">Select Vehicle</option>
                 {vehicles?.map(v => (
-                  <option key={v.id} value={v.id}>{v.registration_num}</option>
+                  <option key={v?.id || 'unknown'} value={v?.id || ''}>{v?.registration_num || 'Unknown'}</option>
                 ))}
               </select>
             </div>
@@ -296,7 +356,7 @@ export default function Fuel({ apiUrl }: FuelProps) {
             </tr>
           </thead>
           <tbody>
-            {records?.length === 0 ? (
+            {!records || records?.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-gray-500">
                   No fuel records found
@@ -304,14 +364,14 @@ export default function Fuel({ apiUrl }: FuelProps) {
               </tr>
             ) : (
               records?.map(r => (
-                <tr key={r.id} className="border-b hover:bg-gray-50">
-                  <td className="p-4">{r.fuel_date || '-'}</td>
-                  <td className="p-4 font-medium">{r.registration_num || '-'}</td>
-                  <td className="p-4">{r.distance_km?.toLocaleString() || '-'}</td>
-                  <td className="p-4">{r.quantity_liters || '-'}</td>
-                  <td className="p-4">{r.km_per_liter?.toFixed(2) || '-'}</td>
-                  <td className="p-4">${r.amount ? r.amount.toFixed(2) : '-'}</td>
-                  <td className="p-4">{r.place || '-'}</td>
+                <tr key={r?.id || Math.random()} className="border-b hover:bg-gray-50">
+                  <td className="p-4">{r?.fuel_date || '-'}</td>
+                  <td className="p-4 font-medium">{r?.registration_num || '-'}</td>
+                  <td className="p-4">{r?.distance_km?.toLocaleString() || '-'}</td>
+                  <td className="p-4">{r?.quantity_liters || '-'}</td>
+                  <td className="p-4">{r?.km_per_liter ? Number(r.km_per_liter).toFixed(2) : '-'}</td>
+                  <td className="p-4">${r?.amount ? Number(r.amount).toFixed(2) : '-'}</td>
+                  <td className="p-4">{r?.place || '-'}</td>
                 </tr>
               ))
             )}
