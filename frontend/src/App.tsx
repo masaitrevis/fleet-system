@@ -13,10 +13,11 @@ import Analytics from './components/Analytics';
 import Accidents from './components/Accidents';
 import Audits from './components/Audits';
 import RequisitionModule from './components/requisition/RequisitionModule';
+import SecurityDashboard from './components/SecurityDashboard';
 
 import Admin from './components/Admin';
 
-export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'requisitions' | 'admin';
+export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'requisitions' | 'security' | 'admin';
 
 // Force correct API URL - env vars not reliable in Netlify
 const API_URL = 'https://fleet-api-0272.onrender.com/api';
@@ -31,6 +32,7 @@ function AppContent() {
 
   const navItems: { key: View; label: string; icon: string; roles: string[] }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
+    { key: 'security', label: 'Security Gate', icon: '🔒', roles: ['admin', 'manager', 'security', 'transport_supervisor', 'hod'] },
     { key: 'requisitions', label: 'Vehicle Requisition', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod'] },
     { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'hod', 'security'] },
     { key: 'audits', label: 'Fleet Audit', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer', 'transport_supervisor', 'hod'] },
@@ -54,6 +56,7 @@ function AppContent() {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard': return <Dashboard apiUrl={API_URL} user={user} />;
+      case 'security': return <SecurityDashboard apiUrl={API_URL} user={user} />;
       case 'requisitions': return <RequisitionModule apiUrl={API_URL} user={user} />;
       case 'accidents': return <Accidents apiUrl={API_URL} user={user} />;
       case 'audits': return <Audits apiUrl={API_URL} user={user} />;

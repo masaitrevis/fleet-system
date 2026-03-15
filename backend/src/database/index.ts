@@ -208,6 +208,9 @@ const createTables = async () => {
       driver_rating INTEGER,
       driver_rating_comment TEXT,
       rated_at TIMESTAMP,
+      trip_duration_minutes INTEGER,
+      returned_at TIMESTAMP,
+      security_notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )

@@ -323,4 +323,226 @@ router.post('/:id/rate', async (req: any, res) => {
   }
 });
 
+// ========== SECURITY GATE MANAGEMENT ==========
+
+// Get vehicles ready for departure (allocated and inspected)
+router.get('/security/ready-for-departure', async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT r.*, 
+        s.staff_name as requester_name, s.department,
+        v.registration_num, v.make_model,
+        d.staff_name as driver_name, d.phone as driver_phone
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      WHERE r.status IN ('allocated', 'ready_for_departure')
+        AND r.inspection_passed = true
+      ORDER BY r.travel_date, r.travel_time
+    `);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Get ready for departure error:', error);
+    res.status(500).json({ error: 'Failed to fetch vehicles' });
+  }
+});
+
+// Get active trips (departed but not returned)
+router.get('/security/active-trips', async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT r.*, 
+        s.staff_name as requester_name, s.department,
+        v.registration_num, v.make_model,
+        d.staff_name as driver_name, d.phone as driver_phone,
+        sec.staff_name as security_name
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      LEFT JOIN staff sec ON r.security_cleared_by = sec.id
+      WHERE r.status = 'departed'
+      ORDER BY r.departed_at DESC
+    `);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Get active trips error:', error);
+    res.status(500).json({ error: 'Failed to fetch active trips' });
+  }
+});
+
+// Security check-out (vehicle leaving)
+router.post('/:id/security-checkout', async (req: any, res) => {
+  const { id } = req.params;
+  const { starting_odometer } = req.body;
+  const securityId = req.user?.userId;
+
+  if (!starting_odometer) {
+    return res.status(400).json({ error: 'Starting odometer reading required' });
+  }
+
+  try {
+    // Update requisition
+    await query(`
+      UPDATE requisitions 
+      SET 
+        starting_odometer = ?,
+        security_cleared_by = ?,
+        security_cleared_at = CURRENT_TIMESTAMP,
+        departed_at = CURRENT_TIMESTAMP,
+        status = 'departed'
+      WHERE id = ?
+    `, [starting_odometer, securityId, id]);
+
+    // Get details for response
+    const result = await query(`
+      SELECT r.*, 
+        s.staff_name as requester_name,
+        v.registration_num, 
+        d.staff_name as driver_name
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      WHERE r.id = ?
+    `, [id]);
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Requisition not found' });
+    }
+
+    // Update vehicle status to 'On Trip'
+    await query(`
+      UPDATE vehicles 
+      SET status = 'On Trip', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [result[0].vehicle_id]);
+
+    res.json({ 
+      message: 'Vehicle checked out successfully', 
+      trip: result[0],
+      departed_at: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Security checkout error:', error);
+    res.status(500).json({ error: 'Failed to check out vehicle' });
+  }
+});
+
+// Security check-in (vehicle returning)
+router.post('/:id/security-checkin', async (req: any, res) => {
+  const { id } = req.params;
+  const { ending_odometer, notes } = req.body;
+  const securityId = req.user?.userId;
+
+  if (!ending_odometer) {
+    return res.status(400).json({ error: 'Ending odometer reading required' });
+  }
+
+  try {
+    // Get trip details first
+    const tripData = await query('SELECT * FROM requisitions WHERE id = ?', [id]);
+    if (tripData.length === 0) {
+      return res.status(404).json({ error: 'Requisition not found' });
+    }
+
+    const trip = tripData[0];
+    const distance = ending_odometer - (trip.starting_odometer || 0);
+    
+    // Calculate trip duration in minutes
+    const departedAt = new Date(trip.departed_at);
+    const returnedAt = new Date();
+    const durationMinutes = Math.round((returnedAt.getTime() - departedAt.getTime()) / (1000 * 60));
+
+    // Update requisition
+    await query(`
+      UPDATE requisitions 
+      SET 
+        ending_odometer = ?,
+        distance_km = ?,
+        trip_duration_minutes = ?,
+        returned_at = CURRENT_TIMESTAMP,
+        security_notes = ?,
+        status = 'returned'
+      WHERE id = ?
+    `, [ending_odometer, distance, durationMinutes, notes || '', id]);
+
+    // Update vehicle status back to 'Active' and mileage
+    await query(`
+      UPDATE vehicles 
+      SET status = 'Active', current_mileage = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [ending_odometer, trip.vehicle_id]);
+
+    // Get full details for response
+    const result = await query(`
+      SELECT r.*, 
+        s.staff_name as requester_name,
+        v.registration_num, 
+        d.staff_name as driver_name
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      WHERE r.id = ?
+    `, [id]);
+
+    res.json({ 
+      message: 'Vehicle checked in successfully', 
+      trip: result[0],
+      distance_km: distance,
+      duration_minutes: durationMinutes,
+      returned_at: returnedAt.toISOString()
+    });
+  } catch (error) {
+    console.error('Security checkin error:', error);
+    res.status(500).json({ error: 'Failed to check in vehicle' });
+  }
+});
+
+// Get driver's trip history with productivity metrics
+router.get('/driver/:driverId/trip-history', async (req, res) => {
+  const { driverId } = req.params;
+  
+  try {
+    const result = await query(`
+      SELECT r.*, 
+        s.staff_name as requester_name,
+        v.registration_num,
+        (r.trip_duration_minutes / 60.0) as duration_hours
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      WHERE r.driver_id = ? AND r.status = 'returned'
+      ORDER BY r.returned_at DESC
+    `, [driverId]);
+    
+    // Calculate productivity metrics
+    const totalTrips = result.length;
+    const totalDurationMinutes = result.reduce((sum: number, trip: any) => 
+      sum + (trip.trip_duration_minutes || 0), 0);
+    const totalDistance = result.reduce((sum: number, trip: any) => 
+      sum + (trip.distance_km || 0), 0);
+    const avgTripDuration = totalTrips > 0 ? totalDurationMinutes / totalTrips : 0;
+    
+    res.json({
+      trips: result,
+      summary: {
+        total_trips: totalTrips,
+        total_duration_hours: (totalDurationMinutes / 60).toFixed(2),
+        total_distance_km: totalDistance.toFixed(2),
+        avg_trip_duration_minutes: avgTripDuration.toFixed(0),
+        avg_speed_kmh: totalDurationMinutes > 0 ? 
+          ((totalDistance / totalDurationMinutes) * 60).toFixed(2) : 0
+      }
+    });
+  } catch (error) {
+    console.error('Get driver trip history error:', error);
+    res.status(500).json({ error: 'Failed to fetch trip history' });
+  }
+});
+
 export default router;

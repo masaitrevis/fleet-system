@@ -79,6 +79,12 @@ export const Permissions = {
   canInvestigateAccident: (role: SystemRole) => 
     ['admin', 'manager', 'transport_supervisor', 'hod', 'security'].includes(role),
   
+  canViewGateManagement: (role: SystemRole) => 
+    ['admin', 'manager', 'transport_supervisor', 'security', 'hod'].includes(role),
+  
+  canManageGate: (role: SystemRole) =>
+    ['admin', 'manager', 'security'].includes(role),
+  
   canManageAudit: (role: SystemRole) => 
     ['admin', 'manager', 'auditor', 'transport_supervisor', 'hod'].includes(role),
   
