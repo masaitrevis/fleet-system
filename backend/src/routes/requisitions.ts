@@ -223,8 +223,24 @@ router.post('/:id/approve', async (req: any, res) => {
   const { id } = req.params;
   const { status, reason } = req.body; // status: 'approved' or 'rejected'
   const approverId = req.user?.userId;
+  
+  console.log('Approve request:', { id, status, approverId, user: req.user });
+
+  if (!approverId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
 
   try {
+    // First check if requisition exists and is pending
+    const checkResult = await query('SELECT * FROM requisitions WHERE id = ?', [id]);
+    if (checkResult.length === 0) {
+      return res.status(404).json({ error: 'Requisition not found' });
+    }
+    
+    if (checkResult[0].status !== 'pending') {
+      return res.status(400).json({ error: 'Requisition is not pending' });
+    }
+
     await query(`
       UPDATE requisitions 
       SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP, approval_reason = ?

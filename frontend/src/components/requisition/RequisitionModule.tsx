@@ -38,6 +38,8 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
   const [ratingTrip, setRatingTrip] = useState<Requisition | null>(null);
   const [rating, setRating] = useState(5);
   const [ratingComment, setRatingComment] = useState('');
+  const [error, setError] = useState('');
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const token = localStorage.getItem('token');
   
   const effectiveRole = getEffectiveRole(user);
@@ -167,6 +169,8 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
   };
 
   const handleApprove = async (id: string, status: 'approved' | 'rejected') => {
+    setError('');
+    setProcessingId(id);
     try {
       const res = await fetch(`${apiUrl}/requisitions/${id}/approve`, {
         method: 'POST',
@@ -176,11 +180,18 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
         },
         body: JSON.stringify({ status, reason: status === 'approved' ? 'Approved' : 'Rejected' })
       });
+      
       if (res.ok) {
         loadPendingApprovals();
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Failed to approve/reject request');
       }
     } catch (err) {
       console.error('Approve error:', err);
+      setError('Network error. Please try again.');
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -362,6 +373,9 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
       {activeTab === 'approvals' && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Pending Approvals</h3>
+          {error && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>
+          )}
           {loading ? (
             <p className="text-center py-8">Loading...</p>
           ) : pendingApprovals?.length === 0 ? (
@@ -379,13 +393,15 @@ export default function RequisitionModule({ apiUrl, user }: RequisitionModulePro
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleApprove(req.id, 'approved')}
-                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                      disabled={processingId === req.id}
+                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
                     >
-                      Approve
+                      {processingId === req.id ? 'Processing...' : 'Approve'}
                     </button>
                     <button
                       onClick={() => handleApprove(req.id, 'rejected')}
-                      className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                      disabled={processingId === req.id}
+                      className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:bg-gray-400"
                     >
                       Reject
                     </button>
