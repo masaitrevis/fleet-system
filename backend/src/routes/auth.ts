@@ -54,10 +54,11 @@ router.post('/register', async (req, res) => {
       isJobRole
     });
   } catch (error: any) {
-    if (error.message?.includes('UNIQUE constraint failed')) {
+    console.error('Registration error:', error);
+    if (error.message?.includes('UNIQUE constraint failed') || error.message?.includes('duplicate key')) {
       res.status(400).json({ error: 'Email or staff number already exists' });
     } else {
-      res.status(500).json({ error: 'Registration failed' });
+      res.status(500).json({ error: 'Registration failed: ' + (error.message || 'Unknown error') });
     }
   }
 });
