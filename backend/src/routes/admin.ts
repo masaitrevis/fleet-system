@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { query } from '../database';
-import { authenticateToken, requireRole } from '../middleware/auth';
+import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // Get all users (admin only)
-router.get('/users', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/users', authenticateToken, requireRole(['admin']), async (req: AuthRequest, res) => {
   try {
     console.log('Admin users request from:', req.user?.email, 'with role:', req.user?.role);
     const users = await query('SELECT id, email, role, created_at FROM users ORDER BY created_at DESC');
