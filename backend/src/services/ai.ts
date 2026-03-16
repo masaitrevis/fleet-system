@@ -715,7 +715,11 @@ interface ChatMessage {
  * Process chatbot queries about fleet data
  */
 export const processChatQuery = async (messages: ChatMessage[]): Promise<string> => {
+  console.log('🤖 processChatQuery called, AI_ENABLED:', AI_ENABLED);
+  console.log('🤖 Messages:', JSON.stringify(messages));
+  
   if (!AI_ENABLED) {
+    console.log('🤖 Using rule-based fallback (no OpenAI key)');
     return processRuleBasedChat(messages[messages.length - 1]?.content || '');
   }
 
@@ -736,6 +740,8 @@ Fleet Status:
 - Today's Routes: ${todayRoutes[0]?.count || 0}
 `;
 
+    console.log('🤖 Calling OpenAI API...');
+    
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -750,9 +756,11 @@ Respond concisely (2-3 sentences). If you need specific data, suggest using the 
       max_tokens: 200
     });
 
+    console.log('🤖 OpenAI response received');
     return response.choices[0].message.content || 'I apologize, I could not process that query.';
-  } catch (error) {
-    console.error('Chat AI error:', error);
+  } catch (error: any) {
+    console.error('🤖 Chat AI error:', error.message);
+    console.log('🤖 Falling back to rule-based response');
     return processRuleBasedChat(messages[messages.length - 1]?.content || '');
   }
 };

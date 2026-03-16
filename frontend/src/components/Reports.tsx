@@ -283,7 +283,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
             f.registration_num || '-', 
             f.distance_km || 0, 
             f.quantity_liters || 0, 
-            f.km_per_liter ? f.km_per_liter.toFixed(2) : '-', 
+            f.km_per_liter ? Number(f.km_per_liter).toFixed(2) : '-', 
             f.amount || 0
           ]);
           break;
@@ -485,7 +485,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
                         <td className="p-3">{f.registration_num || '-'}</td>
                         <td className="p-3">{f.distance_km || '-'}</td>
                         <td className="p-3">{f.quantity_liters || '-'}</td>
-                        <td className="p-3">{f.km_per_liter ? f.km_per_liter.toFixed(2) : '-'} km/L</td>
+                        <td className="p-3">{f.km_per_liter ? Number(f.km_per_liter).toFixed(2) : '-'} km/L</td>
                         <td className="p-3">${f.amount || '-'}</td>
                       </tr>
                     ))

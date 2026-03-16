@@ -48,6 +48,8 @@ export default function AIChatbot({ apiUrl }: AIChatbotProps) {
     }]);
 
     try {
+      console.log('🤖 Sending to AI:', `${apiUrl}/operations/chat`);
+      
       const response = await fetch(`${apiUrl}/operations/chat`, {
         method: 'POST',
         headers: {
@@ -62,24 +64,30 @@ export default function AIChatbot({ apiUrl }: AIChatbotProps) {
         })
       });
 
+      console.log('🤖 AI response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('🤖 AI response:', data);
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: data.response,
+          content: data.response || 'I received your message but have no response.',
           timestamp: new Date()
         }]);
       } else {
+        const errorText = await response.text();
+        console.error('🤖 AI error:', errorText);
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: 'Sorry, I\'m having trouble connecting right now. Please try again.',
+          content: `Error ${response.status}: ${errorText || 'Failed to get response'}`,
           timestamp: new Date()
         }]);
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('🤖 AI catch error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Sorry, I\'m having trouble connecting right now. Please try again.',
+        content: `Network error: ${error.message || 'Failed to connect'}`,
         timestamp: new Date()
       }]);
     } finally {
