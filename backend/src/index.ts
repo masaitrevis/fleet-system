@@ -37,6 +37,12 @@ import * as operationsAI from './services/operationsAI';
 
 dotenv.config();
 
+// Debug: Log environment variables (without secrets)
+console.log('🔧 Environment Check:');
+console.log('  DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'NOT SET');
+console.log('  JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'NOT SET');
+console.log('  FRONTEND_URL:', process.env.FRONTEND_URL || 'Not set (using *)');
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
