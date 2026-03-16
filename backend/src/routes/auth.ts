@@ -79,6 +79,8 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   
+  console.log('Login attempt:', { email, passwordLength: password?.length });
+  
   // Validation
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
@@ -88,15 +90,21 @@ router.post('/login', async (req, res) => {
     // Using PostgreSQL $1 syntax
     const users = await query('SELECT * FROM users WHERE email = $1', [email]);
     
+    console.log('Users found:', users?.length || 0);
+    
     if (!users || users.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
     
     const user = users[0];
+    console.log('User found:', { id: user.id, email: user.email, role: user.role });
+    
     const validPassword = bcrypt.compareSync(password, user.password_hash);
     
+    console.log('Password valid:', validPassword);
+    
     if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
     
     // Check if user is linked to staff record
