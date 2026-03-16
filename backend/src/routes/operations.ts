@@ -3,6 +3,7 @@ import { authenticateToken, requireRole } from '../middleware/auth';
 import { asyncHandler, Errors } from '../middleware/errorHandler';
 import { query } from '../database';
 import * as operationsAI from '../services/operationsAI';
+import * as aiService from '../services/ai';
 
 const router = Router();
 
@@ -174,6 +175,10 @@ router.get('/ai-recommendations',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor']),
   asyncHandler(async (req: Request, res: Response) => {
+    // Get AI-generated recommendations
+    const aiRecommendations = await aiService.generateFleetRecommendations();
+    
+    // Get rule-based recommendations as fallback/enhancement
     const health = await operationsAI.getFleetHealthSummary();
     const status = await operationsAI.getLiveFleetStatus();
     
@@ -184,7 +189,21 @@ router.get('/ai-recommendations',
       description: string;
       impact: string;
       action: string;
+      aiPowered?: boolean;
     }> = [];
+    
+    // Add AI-generated recommendations
+    aiRecommendations.forEach((rec, index) => {
+      recommendations.push({
+        category: 'AI Insight',
+        priority: index < 2 ? 'high' : 'medium',
+        title: rec.substring(0, 50) + (rec.length > 50 ? '...' : ''),
+        description: rec,
+        impact: 'Data-driven recommendation',
+        action: 'Review and implement as appropriate',
+        aiPowered: true
+      });
+    });
     
     // Fleet health recommendations
     if (health.critical > 0) {
@@ -236,19 +255,10 @@ router.get('/ai-recommendations',
       });
     }
     
-    // Fuel efficiency recommendation
-    recommendations.push({
-      category: 'Efficiency',
-      priority: 'medium',
-      title: 'Optimize Route Planning',
-      description: 'Use route optimization to reduce total distance by up to 15% and save fuel.',
-      impact: 'Potential 10-15% fuel savings',
-      action: 'Enable AI route optimization for tomorrow\'s routes'
-    });
-    
     res.json({
       generatedAt: new Date().toISOString(),
       count: recommendations.length,
+      aiEnabled: aiService.AI_ENABLED,
       recommendations: recommendations.sort((a, b) => {
         const priorityOrder = { critical: 0, high: 1, medium: 2 };
         return priorityOrder[a.priority] - priorityOrder[b.priority];

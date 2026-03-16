@@ -1,5 +1,8 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { query } from '../database';
+import * as aiService from '../services/ai';
+import { authenticateToken } from '../middleware/auth';
+import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
 
@@ -498,5 +501,24 @@ router.get('/ai-suggestions', async (req, res) => {
   
   res.json(suggestions);
 });
+
+// AI-powered natural language query
+router.post('/ai-query',
+  authenticateToken,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { query: queryText } = req.body;
+    
+    if (!queryText) {
+      return res.status(400).json({ error: 'Query text is required' });
+    }
+    
+    const result = await aiService.processAnalyticsQuery(queryText);
+    
+    res.json({
+      ...result,
+      aiEnabled: aiService.AI_ENABLED
+    });
+  })
+);
 
 export default router;

@@ -337,7 +337,7 @@ export default function Routes({ apiUrl }: RoutesProps) {
                     <td className="p-4">{r.driver1_name || '-'}</td>
                     <td className="p-4">{r.actual_km || '-'}</td>
                     <td className="p-4">{r.actual_fuel || '-'}</td>
-                    <td className="p-4">{r.actual_consumption_rate ? r.actual_consumption_rate.toFixed(2) : '-'}</td>
+                    <td className="p-4">{r.actual_consumption_rate ? Number(r.actual_consumption_rate).toFixed(2) : '-'}</td>
                   </tr>
                 ))
               )}

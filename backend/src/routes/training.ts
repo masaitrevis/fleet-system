@@ -1,6 +1,7 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { query } from '../database';
 import { v4 as uuidv4 } from 'uuid';
+import * as aiService from '../services/ai';
 
 const router = Router();
 
@@ -130,8 +131,8 @@ router.post('/courses/:courseId/slides/:slideId/generate-notes', async (req: any
     
     const slide = slideResult[0];
     
-    // Generate AI notes based on slide content
-    const aiNotes = generateSlideNotes(slide.title, slide.content);
+    // Generate AI notes using AI service
+    const aiNotes = await aiService.generateSlideNotes(slide.title, slide.content);
     
     // Save notes to database
     await query(`
@@ -143,7 +144,8 @@ router.post('/courses/:courseId/slides/:slideId/generate-notes', async (req: any
     res.json({ 
       slide_id: slideId,
       notes: aiNotes,
-      generated_at: new Date().toISOString()
+      generated_at: new Date().toISOString(),
+      aiEnabled: aiService.AI_ENABLED
     });
   } catch (error: any) {
     console.error('Generate notes error:', error);
