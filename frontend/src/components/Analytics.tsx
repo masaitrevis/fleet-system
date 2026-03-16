@@ -365,7 +365,7 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
             </div>
             <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-xl">
               <p className="text-purple-100 text-sm">Avg Fuel Consumption</p>
-              <p className="text-3xl font-bold">{fleetData.avgFuelConsumption?.toFixed(1) || 10.4} <span className="text-lg">km/l</span></p>
+              <p className="text-3xl font-bold">{Number(fleetData.avgFuelConsumption || 0).toFixed(1)} <span className="text-lg">km/l</span></p>
               <p className="text-purple-200 text-sm mt-1">Target: 10.5 km/l</p>
             </div>
           </div>
@@ -450,7 +450,7 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
                     </td>
                     <td className="p-4 font-medium">{driver.name || 'Unknown'}</td>
                     <td className="p-4 text-center">{driver.trips || 0}</td>
-                    <td className="p-4 text-center">{(driver.fuelEfficiency || 0).toFixed(1)}</td>
+                    <td className="p-4 text-center">{Number(driver.fuelEfficiency || 0).toFixed(1)}</td>
                     <td className="p-4 text-center">
                       <span className={`px-2 py-1 rounded text-sm ${(driver.onTimePerformance || 0) >= 95 ? 'bg-green-100 text-green-800' : (driver.onTimePerformance || 0) >= 90 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
                         {driver.onTimePerformance || 0}%
@@ -459,7 +459,7 @@ export default function Analytics({ apiUrl }: AnalyticsProps) {
                     <td className="p-4 text-center">{driver.experience || 0}</td>
                     <td className="p-4 text-center">
                       <span className={(driver.variance || 0) <= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {(driver.variance || 0) > 0 ? '+' : ''}{(driver.variance || 0).toFixed(1)}%
+                        {(driver.variance || 0) > 0 ? '+' : ''}{Number(driver.variance || 0).toFixed(1)}%
                       </span>
                     </td>
                     <td className="p-4 text-center">

@@ -239,7 +239,7 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
           
           <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl p-6 text-white shadow-lg">
             <div className="text-4xl mb-2">⛽</div>
-            <div className="text-3xl font-bold">{(driverStats?.fuel_efficiency || 0).toFixed(1)}</div>
+            <div className="text-3xl font-bold">{Number(driverStats?.fuel_efficiency || 0).toFixed(1)}</div>
             <div className="text-white/80">Fuel Efficiency (km/L)</div>
           </div>
           

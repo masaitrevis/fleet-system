@@ -368,7 +368,7 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
               {selectedSession.risk_level} Risk
             </span>
             <span className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full">
-              {selectedSession.compliance_percentage?.toFixed(1)}% Compliant
+              {Number(selectedSession.compliance_percentage || 0).toFixed(1)}% Compliant
             </span>
           </div>
         </div>
@@ -586,7 +586,7 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
                           style={{ width: `${session.compliance_percentage || 0}%` }}
                         />
                       </div>
-                      <span className="text-sm">{session.compliance_percentage?.toFixed(0) || 0}%</span>
+                      <span className="text-sm">{Number(session.compliance_percentage || 0).toFixed(0)}%</span>
                     </div>
                   </td>
                   <td className="p-4">
