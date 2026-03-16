@@ -972,8 +972,9 @@ const fetchFleetContext = async (queryText: string): Promise<FleetContext> => {
       SELECT audit.audit_number, audit.status, audit.audit_date, 
              v.registration_num, t.template_name
       FROM audit_sessions audit
-      LEFT JOIN vehicles v ON audit.vehicle_id = v.id
       LEFT JOIN audit_templates t ON audit.template_id = t.id
+      LEFT JOIN LATERAL jsonb_array_elements_text(audit.vehicle_ids) vid ON true
+      LEFT JOIN vehicles v ON vid = v.id::text
       WHERE audit.created_at > CURRENT_DATE - INTERVAL '30 days'
       ORDER BY audit.created_at DESC
       LIMIT 30
@@ -1408,7 +1409,11 @@ export const calculateVehicleRisk = async (vehicleId?: string): Promise<VehicleR
     LEFT JOIN job_cards jc ON jc.vehicle_id = v.id
     LEFT JOIN accidents a ON a.vehicle_id = v.id
     LEFT JOIN repairs r ON r.vehicle_id = v.id
-    LEFT JOIN audit_sessions audit ON audit.vehicle_id = v.id
+    LEFT JOIN LATERAL (
+      SELECT MAX(audit_date) as last_audit_date, MAX(CASE WHEN status = 'Completed' THEN audit_date END) as last_completed_audit
+      FROM audit_sessions 
+      WHERE vehicle_ids @> jsonb_build_array(v.id)
+    ) audit ON true
     LEFT JOIN routes rt ON rt.vehicle_id = v.id
     ${whereClause}
     GROUP BY v.id, v.registration_num, v.current_mileage, v.next_service_due, v.last_service_date, v.defect_notes, v.defect_reported_at, v.status
@@ -1647,7 +1652,7 @@ export const generateRiskAlerts = async (): Promise<RiskAlert[]> => {
       v.registration_num,
       MAX(audit.audit_date) as last_audit_date
     FROM vehicles v
-    LEFT JOIN audit_sessions audit ON audit.vehicle_id = v.id AND audit.status = 'Completed'
+    LEFT JOIN audit_sessions audit ON audit.vehicle_ids @> jsonb_build_array(v.id) AND audit.status = 'Completed'
     WHERE v.deleted_at IS NULL
     AND v.status = 'Active'
     GROUP BY v.id, v.registration_num
@@ -1754,7 +1759,7 @@ export const getFleetIntelligenceSummary = async (): Promise<FleetIntelligenceSu
   const overdueAudits = await query(`
     SELECT COUNT(DISTINCT v.id) as count
     FROM vehicles v
-    LEFT JOIN audit_sessions audit ON audit.vehicle_id = v.id AND audit.status = 'Completed'
+    LEFT JOIN audit_sessions audit ON audit.vehicle_ids @> jsonb_build_array(v.id) AND audit.status = 'Completed'
     WHERE v.deleted_at IS NULL
     AND v.status = 'Active'
     GROUP BY v.id
