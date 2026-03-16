@@ -184,43 +184,70 @@ export default function Fleet({ apiUrl }: FleetProps) {
         </form>
       )}
 
-      <div className="bg-white rounded-xl shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left p-4">Registration</th>
-              <th className="text-left p-4">Make/Model</th>
-              <th className="text-left p-4">Year</th>
-              <th className="text-left p-4">Department</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-left p-4">Mileage</th>
-              <th className="text-left p-4">Target KM/L</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vehicles?.length === 0 ? (
+      {/* Desktop Table */}
+      <div className="hidden md:block bg-white rounded-xl shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[700px]">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan={7} className="p-8 text-center text-gray-500">No vehicles found</td>
+                <th className="text-left p-4">Registration</th>
+                <th className="text-left p-4">Make/Model</th>
+                <th className="text-left p-4">Year</th>
+                <th className="text-left p-4">Department</th>
+                <th className="text-left p-4">Status</th>
+                <th className="text-left p-4">Mileage</th>
+                <th className="text-left p-4">Target KM/L</th>
               </tr>
-            ) : (
-              vehicles?.map(v => (
-                <tr key={v.id} className="border-b hover:bg-gray-50">
-                  <td className="p-4 font-medium">{v.registration_num || '-'}</td>
-                  <td className="p-4">{v.make_model || '-'}</td>
-                  <td className="p-4">{v.year_of_manufacture || '-'}</td>
-                  <td className="p-4">{v.department || '-'}</td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-sm ${getStatusColor(v.status)}`}>
-                      {v.status || 'Unknown'}
-                    </span>
-                  </td>
-                  <td className="p-4">{v.current_mileage ? v.current_mileage.toLocaleString() + ' km' : '-'}</td>
-                  <td className="p-4">{v.target_consumption_rate || '-'}</td>
+            </thead>
+            <tbody>
+              {vehicles?.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-gray-500">No vehicles found</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                vehicles?.map(v => (
+                  <tr key={v.id} className="border-b hover:bg-gray-50">
+                    <td className="p-4 font-medium">{v.registration_num || '-'}</td>
+                    <td className="p-4">{v.make_model || '-'}</td>
+                    <td className="p-4">{v.year_of_manufacture || '-'}</td>
+                    <td className="p-4">{v.department || '-'}</td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded text-sm ${getStatusColor(v.status)}`}>
+                        {v.status || 'Unknown'}
+                      </span>
+                    </td>
+                    <td className="p-4">{v.current_mileage ? v.current_mileage.toLocaleString() + ' km' : '-'}</td>
+                    <td className="p-4">{v.target_consumption_rate || '-'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden space-y-3">
+        {vehicles?.length === 0 ? (
+          <div className="p-8 text-center text-gray-500 bg-white rounded-xl">No vehicles found</div>
+        ) : (
+          vehicles?.map(v => (
+            <div key={v.id} className="bg-white rounded-xl shadow p-4 space-y-2">
+              <div className="flex justify-between items-start">
+                <span className="font-medium text-lg">{v.registration_num || '-'}</span>
+                <span className={`px-2 py-1 rounded text-xs ${getStatusColor(v.status)}`}>
+                  {v.status || 'Unknown'}
+                </span>
+              </div>
+              <div className="text-sm text-gray-600">{v.make_model || '-'} • {v.year_of_manufacture || '-'}</div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Dept: {v.department || '-'}</span>
+                <span className="text-gray-500">{v.current_mileage ? v.current_mileage.toLocaleString() + ' km' : '-'}</span>
+              </div>
+              <div className="text-sm text-gray-500">Target: {v.target_consumption_rate || '-'} km/L</div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

@@ -596,9 +596,11 @@ router.get('/my-certificates', async (req: any, res) => {
   try {
     const result = await query(`
       SELECT c.*, 
-        tc.course_name, tc.course_code, tc.category
+        tc.course_name, tc.course_code, tc.category, tc.duration_hours,
+        s.staff_name
       FROM training_certificates c
       JOIN training_courses tc ON tc.id = c.course_id
+      JOIN staff s ON s.id = c.staff_id
       WHERE c.staff_id = $1
       ORDER BY c.issue_date DESC
     `, [staffId]);

@@ -417,24 +417,36 @@ export default function Training({ apiUrl, user }: TrainingProps) {
           {slide && (
             <div className="space-y-4">
               <h3 className="text-xl sm:text-2xl font-semibold text-blue-900">{slide.title}</h3>
-              <div className="prose max-w-none whitespace-pre-wrap text-sm sm:text-base">{slide.content}</div>
+              {/* Course Notes Section */}
+              <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">📚</span>
+                  <h4 className="font-semibold text-green-900">Course Notes</h4>
+                </div>
+                <div className="text-sm text-green-800 whitespace-pre-wrap leading-relaxed">
+                  {slide.content}
+                </div>
+              </div>
+              
               {slide.media_url && (
-                <img src={slide.media_url} alt={slide.title} className="max-h-48 sm:max-h-64 rounded w-full object-contain" />
+                <div className="mt-4">
+                  <img src={slide.media_url} alt={slide.title} className="max-h-48 sm:max-h-64 rounded w-full object-contain border" />
+                </div>
               )}
               
-              {/* AI Notes Section */}
+              {/* AI Study Guide Section */}
               <div className="mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">🤖</span>
-                    <h4 className="font-semibold text-blue-900 text-sm sm:text-base">AI Notes</h4>
+                    <h4 className="font-semibold text-blue-900 text-sm sm:text-base">AI Study Guide</h4>
                   </div>
                   {!currentSlideNotes && !isLoadingNotes && (
                     <button
                       onClick={() => generateSlideNotes(slide.id, selectedEnrollment.course_id)}
                       className="sm:ml-auto text-xs sm:text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
                     >
-                      Generate Notes
+                      Generate
                     </button>
                   )}
                   {isLoadingNotes && (
@@ -446,7 +458,7 @@ export default function Training({ apiUrl, user }: TrainingProps) {
                   <div className="text-xs sm:text-sm text-blue-800 whitespace-pre-wrap">{currentSlideNotes}</div>
                 ) : (
                   <p className="text-xs sm:text-sm text-blue-600 italic">
-                    {isLoadingNotes ? 'Generating AI notes...' : 'Click "Generate Notes" to get AI-generated study notes for this slide.'}
+                    {isLoadingNotes ? 'Generating AI study guide...' : 'Click "Generate" for AI-generated study points.'}
                   </p>
                 )}
               </div>
@@ -716,6 +728,7 @@ export default function Training({ apiUrl, user }: TrainingProps) {
                 <span className="text-3xl sm:text-4xl">🏆</span>
               </div>
               <div className="mt-4 space-y-1 text-xs sm:text-sm">
+                <p><strong>Recipient:</strong> {cert.staff_name || user?.staff_name}</p>
                 <p><strong>Score:</strong> {cert.score}%</p>
                 <p><strong>Issued:</strong> {new Date(cert.issue_date).toLocaleDateString()}</p>
                 {cert.expiry_date && (

@@ -9,8 +9,7 @@ const router = Router();
 router.get('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const result = await query(`
-      SELECT v.*, 
-        COALESCE((SELECT staff_name FROM staff WHERE id = v.id), 'Unassigned') as assigned_driver
+      SELECT v.* 
       FROM vehicles v
       WHERE v.deleted_at IS NULL
       ORDER BY v.created_at DESC
