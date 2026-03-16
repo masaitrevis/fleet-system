@@ -636,6 +636,179 @@ router.get('/certificates/:id/data', async (req: any, res) => {
   }
 });
 
+// Download certificate as PDF
+router.get('/certificates/:id/download', async (req: any, res) => {
+  const { id } = req.params;
+  
+  try {
+    const result = await query(`
+      SELECT c.*, 
+        s.staff_name, s.staff_no, s.department, s.branch,
+        tc.course_name, tc.course_code, tc.duration_hours, tc.category
+      FROM training_certificates c
+      JOIN staff s ON s.id = c.staff_id
+      JOIN training_courses tc ON tc.id = c.course_id
+      WHERE c.id = $1 OR c.certificate_number = $2
+    `, [id, id]);
+    
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Certificate not found' });
+    }
+    
+    const cert = result[0];
+    
+    // Generate certificate HTML for PDF
+    const certificateHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page { size: A4 landscape; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Georgia', serif; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .certificate {
+      width: 90%;
+      max-width: 900px;
+      background: white;
+      padding: 60px;
+      border: 15px solid #f0f0f0;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    .header {
+      border-bottom: 3px solid #667eea;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    .logo { font-size: 48px; margin-bottom: 10px; }
+    .company-name { 
+      font-size: 28px; 
+      font-weight: bold; 
+      color: #333;
+      letter-spacing: 2px;
+    }
+    .title {
+      font-size: 42px;
+      color: #667eea;
+      margin: 30px 0;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+    }
+    .recipient {
+      font-size: 32px;
+      color: #333;
+      margin: 20px 0;
+      font-weight: bold;
+    }
+    .description {
+      font-size: 18px;
+      color: #666;
+      margin: 20px 0;
+      line-height: 1.6;
+    }
+    .course-name {
+      font-size: 24px;
+      color: #764ba2;
+      font-weight: bold;
+      margin: 15px 0;
+    }
+    .details {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin: 30px 0;
+      font-size: 14px;
+      color: #666;
+    }
+    .footer {
+      margin-top: 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .signature-line {
+      border-top: 2px solid #333;
+      width: 200px;
+      padding-top: 10px;
+      font-size: 14px;
+      color: #333;
+    }
+    .cert-number {
+      font-size: 12px;
+      color: #999;
+      font-family: monospace;
+    }
+    .seal {
+      width: 100px;
+      height: 100px;
+      border: 3px solid #667eea;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      color: #667eea;
+    }
+  </style>
+</head>
+<body>
+  <div class="certificate">
+    <div class="header">
+      <div class="logo">🎓</div>
+      <div class="company-name">NEXTBOTICS FLEET MANAGEMENT</div>
+    </div>
+    
+    <div class="title">Certificate of Completion</div>
+    
+    <div class="description">
+      This is to certify that
+    </div>
+    
+    <div class="recipient">${cert.staff_name}</div>
+    
+    <div class="description">
+      has successfully completed the training course
+    </div>
+    
+    <div class="course-name">${cert.course_name}</div>
+    
+    <div class="details">
+      <span>Score: <strong>${cert.score}%</strong></span>
+      <span>Duration: <strong>${cert.duration_hours || 'N/A'} hours</strong></span>
+      <span>Issued: <strong>${new Date(cert.issue_date).toLocaleDateString()}</strong></span>
+    </div>
+    
+    <div class="footer">
+      <div class="signature-line">
+        Training Manager
+      </div>
+      <div class="seal">✓</div>
+      <div style="text-align: right;">
+        <div class="cert-number">${cert.certificate_number}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Disposition', `attachment; filename="certificate-${cert.certificate_number}.html"`);
+    res.send(certificateHTML);
+    
+  } catch (error) {
+    console.error('Download certificate error:', error);
+    res.status(500).json({ error: 'Failed to download certificate' });
+  }
+});
+
 // ========== MANAGER UNLOCK ==========
 
 // Get locked enrollments (for managers)

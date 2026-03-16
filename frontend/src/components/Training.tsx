@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
 
 interface TrainingProps {
   apiUrl: string;
@@ -81,7 +82,7 @@ export default function Training({ apiUrl, user }: TrainingProps) {
 
   // Generate AI notes for a slide
   const generateSlideNotes = async (slideId: string, courseId: string) => {
-    if (slideNotes[slideId]) return; // Already generated
+    if (slideNotes[slideId]) return;
     
     setLoadingNotes(prev => ({ ...prev, [slideId]: true }));
     
@@ -148,7 +149,6 @@ export default function Training({ apiUrl, user }: TrainingProps) {
         setCurrentSlide(enrollment.current_slide || 0);
         setView('slides');
         
-        // Pre-fetch notes for the first slide
         if (data.slides?.[0]?.id) {
           generateSlideNotes(data.slides[0].id, enrollment.course_id);
         }
@@ -178,7 +178,6 @@ export default function Training({ apiUrl, user }: TrainingProps) {
     setCurrentSlide(newSlide);
     updateProgress(newSlide);
     
-    // Generate notes for the new slide
     const slide = slides[newSlide];
     if (slide?.id && !slideNotes[slide.id]) {
       generateSlideNotes(slide.id, selectedEnrollment.course_id);
@@ -193,14 +192,12 @@ export default function Training({ apiUrl, user }: TrainingProps) {
     setError('');
     
     try {
-      // First ensure we have quiz questions
       let questionsRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/quiz?exclude_used=true&enrollment_id=${enrollment.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       let questions = await questionsRes.json();
       
-      // If no questions, generate them
       if (questions.length === 0) {
         setLoading(true);
         const genRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/generate-quiz`, {
@@ -215,7 +212,6 @@ export default function Training({ apiUrl, user }: TrainingProps) {
           return;
         }
         
-        // Fetch again with exclusion
         questionsRes = await fetch(`${apiUrl}/training/courses/${enrollment.course_id}/quiz?exclude_used=true&enrollment_id=${enrollment.id}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -289,48 +285,108 @@ export default function Training({ apiUrl, user }: TrainingProps) {
     }
   };
 
-  // Certificate PDF view
-  const viewCertificate = (cert: any) => {
-    const certWindow = window.open('', '_blank');
-    if (certWindow) {
-      certWindow.document.write(`
-        <html>
-        <head>
-          <title>Certificate - ${cert.course_name}</title>
-          <style>
-            body { font-family: Georgia, serif; text-align: center; padding: 50px; background: #f5f5f5; }
-            .certificate { border: 15px solid #1e3a5f; padding: 60px; background: white; max-width: 800px; margin: 0 auto; }
-            h1 { color: #1e3a5f; font-size: 42px; margin-bottom: 20px; }
-            h2 { color: #c9a227; font-size: 32px; margin: 30px 0; }
-            .recipient { font-size: 36px; color: #1e3a5f; margin: 30px 0; font-weight: bold; }
-            .details { margin: 30px 0; font-size: 18px; color: #555; }
-            .seal { width: 120px; height: 120px; border: 5px solid #c9a227; border-radius: 50%; margin: 30px auto; 
-                    display: flex; align-items: center; justify-content: center; color: #c9a227; font-size: 14px; }
-            .cert-number { position: absolute; top: 20px; right: 20px; font-size: 12px; color: #666; }
-            @media print { body { background: white; } .certificate { border: none; } button { display: none; } }
-          </style>
-        </head>
-        <body>
-          <div class="certificate">
-            <div style="text-align: right; font-size: 12px; color: #666;">Cert #: ${cert.certificate_number}</div>
-            <h1>CERTIFICATE<br/>OF COMPLETION</h1>
-            <p style="font-size: 18px;">This certifies that</p>
-            <div class="recipient">${cert.staff_name || user?.staff_name}</div>
-            <p style="font-size: 18px;">has successfully completed</p>
-            <h2>${cert.course_name}</h2>
-            <div class="details">
-              <p><strong>Score:</strong> ${cert.score}% | <strong>Duration:</strong> ${cert.duration_hours || 'N/A'} hours</p>
-              <p><strong>Issue Date:</strong> ${new Date(cert.issue_date).toLocaleDateString()}</p>
-              ${cert.expiry_date ? `<p><strong>Valid Until:</strong> ${new Date(cert.expiry_date).toLocaleDateString()}</p>` : ''}
-            </div>
-            <div class="seal">FLEET<br/>PRO</div>
-            <p style="margin-top: 40px; font-size: 14px; color: #888;">Fleet Management Training System</p>
-          </div>
-          <button onclick="window.print()" style="margin-top: 20px; padding: 10px 30px; font-size: 16px; cursor: pointer;">Print Certificate</button>
-        </body>
-        </html>
-      `);
+  // Download certificate as PDF
+  const downloadCertificatePDF = (cert: any) => {
+    const doc = new jsPDF('landscape', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const centerX = pageWidth / 2;
+    
+    // Background gradient simulation with rectangles
+    doc.setFillColor(102, 126, 234);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
+    
+    // Certificate border
+    doc.setDrawColor(201, 162, 39);
+    doc.setLineWidth(3);
+    doc.rect(10, 10, pageWidth - 20, pageHeight - 20);
+    
+    // Inner white area
+    doc.setFillColor(255, 255, 255);
+    doc.rect(15, 15, pageWidth - 30, pageHeight - 30, 'F');
+    
+    // Header
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Certificate #:', pageWidth - 40, 25);
+    doc.setFontSize(10);
+    doc.text(cert.certificate_number, pageWidth - 40, 30);
+    
+    // Logo/Title
+    doc.setFontSize(48);
+    doc.setTextColor(30, 58, 95);
+    doc.setFont('helvetica', 'bold');
+    doc.text('CERTIFICATE', centerX, 45, { align: 'center' });
+    
+    doc.setFontSize(24);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('OF COMPLETION', centerX, 55, { align: 'center' });
+    
+    // Decorative line
+    doc.setDrawColor(201, 162, 39);
+    doc.setLineWidth(1);
+    doc.line(centerX - 40, 62, centerX + 40, 62);
+    
+    // Recipient text
+    doc.setFontSize(14);
+    doc.setTextColor(100, 100, 100);
+    doc.text('This certifies that', centerX, 75, { align: 'center' });
+    
+    // Recipient name
+    doc.setFontSize(36);
+    doc.setTextColor(30, 58, 95);
+    doc.setFont('helvetica', 'bold');
+    doc.text(cert.staff_name || user?.staff_name || 'Student', centerX, 90, { align: 'center' });
+    
+    // Course text
+    doc.setFontSize(14);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('has successfully completed the training course', centerX, 105, { align: 'center' });
+    
+    // Course name
+    doc.setFontSize(28);
+    doc.setTextColor(118, 75, 162);
+    doc.setFont('helvetica', 'bold');
+    doc.text(cert.course_name, centerX, 120, { align: 'center' });
+    
+    // Details
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    const detailsY = 135;
+    doc.text(`Score: ${cert.score}%`, centerX - 50, detailsY, { align: 'center' });
+    doc.text(`Duration: ${cert.duration_hours || 'N/A'} hours`, centerX, detailsY, { align: 'center' });
+    doc.text(`Issued: ${new Date(cert.issue_date).toLocaleDateString()}`, centerX + 50, detailsY, { align: 'center' });
+    
+    if (cert.expiry_date) {
+      doc.text(`Valid Until: ${new Date(cert.expiry_date).toLocaleDateString()}`, centerX, detailsY + 8, { align: 'center' });
     }
+    
+    // Seal
+    doc.setDrawColor(201, 162, 39);
+    doc.setLineWidth(2);
+    doc.circle(centerX, 165, 15);
+    doc.setFontSize(10);
+    doc.setTextColor(201, 162, 39);
+    doc.text('FLEET', centerX, 163, { align: 'center' });
+    doc.text('PRO', centerX, 169, { align: 'center' });
+    
+    // Signature line
+    doc.setDrawColor(50, 50, 50);
+    doc.setLineWidth(0.5);
+    doc.line(40, 185, 100, 185);
+    doc.setFontSize(10);
+    doc.setTextColor(50, 50, 50);
+    doc.text('Training Manager', 70, 192, { align: 'center' });
+    
+    // Footer
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    doc.text('NextBotics Fleet Management Training System', centerX, pageHeight - 20, { align: 'center' });
+    
+    doc.save(`certificate-${cert.certificate_number}.pdf`);
   };
 
   // RENDER VIEWS
@@ -342,14 +398,14 @@ export default function Training({ apiUrl, user }: TrainingProps) {
     const isLoadingNotes = slide?.id ? loadingNotes[slide.id] : false;
     
     return (
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">{selectedEnrollment.course_name}</h2>
-          <button onClick={() => setView('my-training')} className="text-gray-600 hover:text-gray-800">← Back</button>
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+          <h2 className="text-lg sm:text-xl font-bold truncate">{selectedEnrollment.course_name}</h2>
+          <button onClick={() => setView('my-training')} className="text-gray-600 hover:text-gray-800 text-sm">← Back</button>
         </div>
         
-        <div className="bg-white rounded-lg shadow-lg p-8 min-h-[400px]">
-          <div className="flex justify-between text-sm text-gray-500 mb-4">
+        <div className="bg-white rounded-lg shadow-lg p-4 sm:p-8 min-h-[300px] sm:min-h-[400px]">
+          <div className="flex flex-col sm:flex-row justify-between text-sm text-gray-500 mb-4 gap-1">
             <span>Slide {currentSlide + 1} of {slides.length}</span>
             <span>{Math.round(((currentSlide + 1) / slides.length) * 100)}% Complete</span>
           </div>
@@ -360,34 +416,36 @@ export default function Training({ apiUrl, user }: TrainingProps) {
           
           {slide && (
             <div className="space-y-4">
-              <h3 className="text-2xl font-semibold text-blue-900">{slide.title}</h3>
-              <div className="prose max-w-none whitespace-pre-wrap">{slide.content}</div>
+              <h3 className="text-xl sm:text-2xl font-semibold text-blue-900">{slide.title}</h3>
+              <div className="prose max-w-none whitespace-pre-wrap text-sm sm:text-base">{slide.content}</div>
               {slide.media_url && (
-                <img src={slide.media_url} alt={slide.title} className="max-h-64 rounded" />
+                <img src={slide.media_url} alt={slide.title} className="max-h-48 sm:max-h-64 rounded w-full object-contain" />
               )}
               
               {/* AI Notes Section */}
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">🤖</span>
-                  <h4 className="font-semibold text-blue-900">AI Notes</h4>
+              <div className="mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🤖</span>
+                    <h4 className="font-semibold text-blue-900 text-sm sm:text-base">AI Notes</h4>
+                  </div>
                   {!currentSlideNotes && !isLoadingNotes && (
                     <button
                       onClick={() => generateSlideNotes(slide.id, selectedEnrollment.course_id)}
-                      className="ml-auto text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                      className="sm:ml-auto text-xs sm:text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
                     >
                       Generate Notes
                     </button>
                   )}
                   {isLoadingNotes && (
-                    <span className="ml-auto text-sm text-blue-600">Generating...</span>
+                    <span className="sm:ml-auto text-xs text-blue-600">Generating...</span>
                   )}
                 </div>
                 
                 {currentSlideNotes ? (
-                  <div className="text-sm text-blue-800 whitespace-pre-wrap">{currentSlideNotes}</div>
+                  <div className="text-xs sm:text-sm text-blue-800 whitespace-pre-wrap">{currentSlideNotes}</div>
                 ) : (
-                  <p className="text-sm text-blue-600 italic">
+                  <p className="text-xs sm:text-sm text-blue-600 italic">
                     {isLoadingNotes ? 'Generating AI notes...' : 'Click "Generate Notes" to get AI-generated study notes for this slide.'}
                   </p>
                 )}
@@ -396,26 +454,26 @@ export default function Training({ apiUrl, user }: TrainingProps) {
           )}
         </div>
         
-        <div className="flex justify-between mt-6">
+        <div className="flex flex-col sm:flex-row justify-between mt-6 gap-2">
           <button 
             onClick={() => goToSlide(currentSlide - 1)}
             disabled={currentSlide === 0}
-            className="px-6 py-2 bg-gray-200 rounded disabled:opacity-50"
+            className="px-4 sm:px-6 py-2 bg-gray-200 rounded disabled:opacity-50 text-sm sm:text-base"
           >
-            Previous
+            ← Previous
           </button>
           
           {currentSlide < slides.length - 1 ? (
             <button 
               onClick={() => goToSlide(currentSlide + 1)}
-              className="px-6 py-2 bg-blue-600 text-white rounded"
+              className="px-4 sm:px-6 py-2 bg-blue-600 text-white rounded text-sm sm:text-base"
             >
               Next →
             </button>
           ) : (
             <button 
               onClick={() => { updateProgress(slides.length); setView('my-training'); startQuiz(selectedEnrollment); }}
-              className="px-6 py-2 bg-green-600 text-white rounded"
+              className="px-4 sm:px-6 py-2 bg-green-600 text-white rounded text-sm sm:text-base"
             >
               Take Quiz →
             </button>
@@ -428,63 +486,65 @@ export default function Training({ apiUrl, user }: TrainingProps) {
   // Quiz View
   if (view === 'quiz' && selectedEnrollment) {
     return (
-      <div className="max-w-3xl mx-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Quiz: {selectedEnrollment.course_name}</h2>
-          <button onClick={() => setView('my-training')} className="text-gray-600 hover:text-gray-800">← Exit</button>
+      <div className="max-w-3xl mx-auto px-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+          <h2 className="text-lg sm:text-xl font-bold">Quiz: {selectedEnrollment.course_name}</h2>
+          <button onClick={() => setView('my-training')} className="text-gray-600 hover:text-gray-800 text-sm">← Exit</button>
         </div>
         
         {error && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">{error}</div>
+          <div className="bg-red-50 text-red-600 p-3 sm:p-4 rounded-lg mb-4 text-sm">{error}</div>
         )}
         
         {quizResult ? (
-          <div className={`p-8 rounded-lg text-center ${quizResult.passed ? 'bg-green-50' : quizResult.attempts_remaining === 0 ? 'bg-red-50' : 'bg-yellow-50'}`}>
-            <div className="text-6xl mb-4">{quizResult.passed ? '🎉' : quizResult.attempts_remaining === 0 ? '🔒' : '⚠️'}</div>
-            <h3 className="text-2xl font-bold mb-2">
+          <div className={`p-6 sm:p-8 rounded-lg text-center ${quizResult.passed ? 'bg-green-50' : quizResult.attempts_remaining === 0 ? 'bg-red-50' : 'bg-yellow-50'}`}>
+            <div className="text-5xl sm:text-6xl mb-4">{quizResult.passed ? '🎉' : quizResult.attempts_remaining === 0 ? '🔒' : '⚠️'}</div>
+            <h3 className="text-xl sm:text-2xl font-bold mb-2">
               {quizResult.passed ? 'Congratulations!' : quizResult.attempts_remaining === 0 ? 'Training Locked' : 'Try Again'}
             </h3>
-            <p className="text-xl mb-4">Score: <strong>{quizResult.score}%</strong> ({quizResult.correct_answers}/{quizResult.total_questions} correct)</p>
-            <p className="mb-4">Passing score: {70}%</p>
+            <p className="text-lg mb-4">Score: <strong>{quizResult.score}%</strong> ({quizResult.correct_answers}/{quizResult.total_questions} correct)</p>
+            <p className="mb-4 text-sm sm:text-base">Passing score: 70%</p>
             
             {quizResult.passed ? (
               <div>
-                <p className="text-green-700 mb-4">You passed! Your certificate has been generated.</p>
-                <button onClick={() => { setView('certificates'); fetchCertificates(); }} className="px-6 py-2 bg-blue-600 text-white rounded">
+                <p className="text-green-700 mb-4 text-sm sm:text-base">You passed! Your certificate has been generated.</p>
+                <button onClick={() => { setView('certificates'); fetchCertificates(); }} className="px-4 sm:px-6 py-2 bg-blue-600 text-white rounded text-sm sm:text-base">
                   View Certificate →
                 </button>
               </div>
             ) : quizResult.attempts_remaining === 0 ? (
               <div>
-                <p className="text-red-700 mb-4">Maximum attempts reached. Contact your Transport Manager to unlock this training.</p>
-                <button onClick={() => setView('my-training')} className="px-6 py-2 bg-gray-600 text-white rounded">
+                <p className="text-red-700 mb-4 text-sm sm:text-base">Maximum attempts reached. Contact your Transport Manager to unlock this training.</p>
+                <button onClick={() => setView('my-training')} className="px-4 sm:px-6 py-2 bg-gray-600 text-white rounded text-sm sm:text-base">
                   Back to My Training
                 </button>
               </div>
             ) : (
-              <div>
-                <p className="text-yellow-700 mb-4">You have {quizResult.attempts_remaining} attempt(s) remaining.</p>
-                <button onClick={() => startQuiz(selectedEnrollment)} className="px-6 py-2 bg-yellow-600 text-white rounded mr-2">
-                  Try Again
-                </button>
-                <button onClick={() => setView('my-training')} className="px-6 py-2 bg-gray-600 text-white rounded">
-                  Study More
-                </button>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <p className="text-yellow-700 mb-4 text-sm sm:text-base">You have {quizResult.attempts_remaining} attempt(s) remaining.</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button onClick={() => startQuiz(selectedEnrollment)} className="px-4 sm:px-6 py-2 bg-yellow-600 text-white rounded text-sm sm:text-base">
+                    Try Again
+                  </button>
+                  <button onClick={() => setView('my-training')} className="px-4 sm:px-6 py-2 bg-gray-600 text-white rounded text-sm sm:text-base">
+                    Study More
+                  </button>
+                </div>
               </div>
             )}
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="bg-blue-50 p-4 rounded text-sm">
+            <div className="bg-blue-50 p-3 sm:p-4 rounded text-xs sm:text-sm">
               Attempt {selectedEnrollment.quiz_attempts + 1} of 3 • Answer all {quizQuestions.length} questions • Need 70% to pass
             </div>
             
             {quizQuestions.map((q, idx) => (
-              <div key={q.id} className="bg-white p-4 rounded-lg shadow">
-                <p className="font-medium mb-3">{idx + 1}. {q.question_text}</p>
+              <div key={q.id} className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <p className="font-medium mb-3 text-sm sm:text-base">{idx + 1}. {q.question_text}</p>
                 <div className="space-y-2">
                   {['A', 'B', 'C', 'D'].map((opt) => (
-                    <label key={opt} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer">
+                    <label key={opt} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer text-sm">
                       <input 
                         type="radio" 
                         name={q.id} 
@@ -503,7 +563,7 @@ export default function Training({ apiUrl, user }: TrainingProps) {
             <button 
               onClick={submitQuiz}
               disabled={loading || Object.keys(quizAnswers).length < quizQuestions.length}
-              className="w-full py-3 bg-blue-600 text-white rounded-lg disabled:bg-gray-400"
+              className="w-full py-3 bg-blue-600 text-white rounded-lg disabled:bg-gray-400 text-sm sm:text-base"
             >
               {loading ? 'Submitting...' : 'Submit Quiz'}
             </button>
@@ -515,16 +575,16 @@ export default function Training({ apiUrl, user }: TrainingProps) {
 
   // Main View
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Training & Certifications</h1>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setView('dashboard')} className={`px-4 py-2 rounded ${view === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Dashboard</button>
-          <button onClick={() => setView('courses')} className={`px-4 py-2 rounded ${view === 'courses' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>All Courses</button>
-          <button onClick={() => setView('my-training')} className={`px-4 py-2 rounded ${view === 'my-training' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>My Training</button>
-          <button onClick={() => setView('certificates')} className={`px-4 py-2 rounded ${view === 'certificates' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Certificates</button>
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
+      <div className="flex flex-col gap-4">
+        <h1 className="text-xl sm:text-2xl font-bold">Training & Certifications</h1>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setView('dashboard')} className={`px-3 sm:px-4 py-2 rounded text-xs sm:text-sm ${view === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Dashboard</button>
+          <button onClick={() => setView('courses')} className={`px-3 sm:px-4 py-2 rounded text-xs sm:text-sm ${view === 'courses' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>All Courses</button>
+          <button onClick={() => setView('my-training')} className={`px-3 sm:px-4 py-2 rounded text-xs sm:text-sm ${view === 'my-training' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>My Training</button>
+          <button onClick={() => setView('certificates')} className={`px-3 sm:px-4 py-2 rounded text-xs sm:text-sm ${view === 'certificates' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Certificates</button>
           {isManager && (
-            <button onClick={() => setView('locked')} className={`px-4 py-2 rounded ${view === 'locked' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800'}`}>
+            <button onClick={() => setView('locked')} className={`px-3 sm:px-4 py-2 rounded text-xs sm:text-sm ${view === 'locked' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800'}`}>
               Locked ({lockedEnrollments.length})
             </button>
           )}
@@ -532,44 +592,44 @@ export default function Training({ apiUrl, user }: TrainingProps) {
       </div>
 
       {error && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-lg">{error}</div>
+        <div className="bg-red-50 text-red-600 p-3 sm:p-4 rounded-lg text-sm">{error}</div>
       )}
 
       {/* Dashboard View */}
       {view === 'dashboard' && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600">Enrolled Courses</p>
-            <p className="text-2xl font-bold text-blue-600">{enrollments.length}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+          <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
+            <p className="text-xs text-gray-600">Enrolled Courses</p>
+            <p className="text-xl sm:text-2xl font-bold text-blue-600">{enrollments.length}</p>
           </div>
-          <div className="bg-green-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600">Completed</p>
-            <p className="text-2xl font-bold text-green-600">{enrollments.filter(e => e.status === 'passed').length}</p>
+          <div className="bg-green-50 p-3 sm:p-4 rounded-lg">
+            <p className="text-xs text-gray-600">Completed</p>
+            <p className="text-xl sm:text-2xl font-bold text-green-600">{enrollments.filter(e => e.status === 'passed').length}</p>
           </div>
-          <div className="bg-yellow-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600">In Progress</p>
-            <p className="text-2xl font-bold text-yellow-600">{enrollments.filter(e => ['in_progress', 'quiz_pending'].includes(e.status)).length}</p>
+          <div className="bg-yellow-50 p-3 sm:p-4 rounded-lg">
+            <p className="text-xs text-gray-600">In Progress</p>
+            <p className="text-xl sm:text-2xl font-bold text-yellow-600">{enrollments.filter(e => ['in_progress', 'quiz_pending'].includes(e.status)).length}</p>
           </div>
-          <div className="bg-purple-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600">Certificates</p>
-            <p className="text-2xl font-bold text-purple-600">{certificates.length}</p>
+          <div className="bg-purple-50 p-3 sm:p-4 rounded-lg">
+            <p className="text-xs text-gray-600">Certificates</p>
+            <p className="text-xl sm:text-2xl font-bold text-purple-600">{certificates.length}</p>
           </div>
         </div>
       )}
 
       {/* Courses View */}
       {view === 'courses' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {courses.map(course => {
             const enrolled = enrollments.find(e => e.course_id === course.id);
             return (
-              <div key={course.id} className="bg-white p-4 rounded-lg shadow">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-semibold">{course.course_name}</h3>
-                  {course.mandatory && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">Required</span>}
+              <div key={course.id} className="bg-white p-3 sm:p-4 rounded-lg shadow">
+                <div className="flex justify-between items-start mb-2 gap-2">
+                  <h3 className="font-semibold text-sm sm:text-base">{course.course_name}</h3>
+                  {course.mandatory && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded whitespace-nowrap">Required</span>}
                 </div>
-                <p className="text-sm text-gray-500 mb-2">{course.category} • {course.duration_hours}h</p>
-                <p className="text-xs text-gray-400 mb-4">{course.description?.substring(0, 100)}...</p>
+                <p className="text-xs text-gray-500 mb-2">{course.category} • {course.duration_hours}h</p>
+                <p className="text-xs text-gray-400 mb-4 line-clamp-2">{course.description}</p>
                 
                 {enrolled ? (
                   <button 
@@ -581,7 +641,7 @@ export default function Training({ apiUrl, user }: TrainingProps) {
                         setView('my-training');
                       }
                     }}
-                    className={`w-full py-2 rounded ${
+                    className={`w-full py-2 rounded text-sm ${
                       enrolled.status === 'passed' 
                         ? 'bg-green-100 text-green-700' 
                         : 'bg-blue-100 text-blue-700'
@@ -593,7 +653,7 @@ export default function Training({ apiUrl, user }: TrainingProps) {
                      enrolled.status === 'quiz_pending' ? 'Take Quiz →' : 'Enrolled'}
                   </button>
                 ) : (
-                  <button onClick={() => handleEnroll(course.id)} disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded disabled:bg-gray-400">
+                  <button onClick={() => handleEnroll(course.id)} disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded text-sm disabled:bg-gray-400">
                     {loading ? 'Enrolling...' : 'Enroll Now'}
                   </button>
                 )}
@@ -605,13 +665,13 @@ export default function Training({ apiUrl, user }: TrainingProps) {
 
       {/* My Training View */}
       {view === 'my-training' && (
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {enrollments.map(e => (
-            <div key={e.id} className="bg-white p-4 rounded-lg shadow flex justify-between items-center">
-              <div>
-                <h3 className="font-semibold">{e.course_name}</h3>
-                <p className="text-sm text-gray-500">{e.category} • Enrolled {new Date(e.enrolled_at).toLocaleDateString()}</p>
-                <div className="flex gap-2 mt-2">
+            <div key={e.id} className="bg-white p-3 sm:p-4 rounded-lg shadow flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-sm sm:text-base truncate">{e.course_name}</h3>
+                <p className="text-xs text-gray-500">{e.category} • Enrolled {new Date(e.enrolled_at).toLocaleDateString()}</p>
+                <div className="flex flex-wrap gap-2 mt-2">
                   <span className={`px-2 py-1 rounded text-xs ${STATUS_COLORS[e.status] || 'bg-gray-100'}`}>
                     {e.status.replace('_', ' ')}
                   </span>
@@ -623,71 +683,73 @@ export default function Training({ apiUrl, user }: TrainingProps) {
                 </div>
               </div>
               
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto">
                 {e.status === 'enrolled' && (
-                  <button onClick={() => startTraining(e)} className="px-4 py-2 bg-blue-600 text-white rounded">Start Learning</button>
+                  <button onClick={() => startTraining(e)} className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 text-white rounded text-sm">Start Learning</button>
                 )}
                 {e.status === 'in_progress' && (
-                  <button onClick={() => startTraining(e)} className="px-4 py-2 bg-yellow-600 text-white rounded">Continue</button>
+                  <button onClick={() => startTraining(e)} className="flex-1 sm:flex-none px-4 py-2 bg-yellow-600 text-white rounded text-sm">Continue</button>
                 )}
                 {e.status === 'quiz_pending' && (
-                  <button onClick={() => startQuiz(e)} className="px-4 py-2 bg-orange-600 text-white rounded">Take Quiz</button>
+                  <button onClick={() => startQuiz(e)} className="flex-1 sm:flex-none px-4 py-2 bg-orange-600 text-white rounded text-sm">Take Quiz</button>
                 )}
                 {e.status === 'locked' && (
-                  <span className="px-4 py-2 bg-gray-300 text-gray-600 rounded">🔒 Locked</span>
+                  <span className="flex-1 sm:flex-none px-4 py-2 bg-gray-300 text-gray-600 rounded text-center text-sm">🔒 Locked</span>
                 )}
               </div>
             </div>
           ))}
-          {enrollments.length === 0 && <p className="text-center text-gray-500 py-8">No enrollments. Browse courses to get started!</p>}
+          {enrollments.length === 0 && <p className="text-center text-gray-500 py-8 text-sm">No enrollments. Browse courses to get started!</p>}
         </div>
       )}
 
       {/* Certificates View */}
       {view === 'certificates' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {certificates.map(cert => (
-            <div key={cert.id} className="bg-gradient-to-br from-blue-50 to-purple-50 p-6 rounded-lg border-2 border-blue-200">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-bold text-lg">{cert.course_name}</h3>
-                  <p className="text-sm text-gray-600">{cert.course_code}</p>
+            <div key={cert.id} className="bg-gradient-to-br from-blue-50 to-purple-50 p-4 sm:p-6 rounded-lg border-2 border-blue-200">
+              <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-base sm:text-lg truncate">{cert.course_name}</h3>
+                  <p className="text-xs text-gray-600">{cert.course_code}</p>
                 </div>
-                <span className="text-4xl">🏆</span>
+                <span className="text-3xl sm:text-4xl">🏆</span>
               </div>
-              <div className="mt-4 space-y-1 text-sm">
+              <div className="mt-4 space-y-1 text-xs sm:text-sm">
                 <p><strong>Score:</strong> {cert.score}%</p>
                 <p><strong>Issued:</strong> {new Date(cert.issue_date).toLocaleDateString()}</p>
                 {cert.expiry_date && (
                   <p><strong>Expires:</strong> {new Date(cert.expiry_date).toLocaleDateString()}</p>
                 )}
-                <p className="text-xs text-gray-500">{cert.certificate_number}</p>
+                <p className="text-xs text-gray-500 break-all">{cert.certificate_number}</p>
               </div>
-              <button onClick={() => viewCertificate(cert)} className="mt-4 w-full py-2 bg-blue-600 text-white rounded">
-                View Certificate
-              </button>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => downloadCertificatePDF(cert)} className="flex-1 py-2 bg-blue-600 text-white rounded text-xs sm:text-sm">
+                  Download PDF
+                </button>
+              </div>
             </div>
           ))}
-          {certificates.length === 0 && <p className="text-center text-gray-500 py-8">No certificates yet. Complete training to earn certificates!</p>}
+          {certificates.length === 0 && <p className="text-center text-gray-500 py-8 text-sm">No certificates yet. Complete training to earn certificates!</p>}
         </div>
       )}
 
       {/* Locked Enrollments (Manager) */}
       {view === 'locked' && isManager && (
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {lockedEnrollments.map(e => (
-            <div key={e.id} className="bg-red-50 p-4 rounded-lg border border-red-200 flex justify-between items-center">
-              <div>
-                <h3 className="font-semibold">{e.staff_name} ({e.staff_no})</h3>
-                <p className="text-sm text-gray-600">{e.course_name} • {e.department}</p>
+            <div key={e.id} className="bg-red-50 p-3 sm:p-4 rounded-lg border border-red-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-sm sm:text-base">{e.staff_name} ({e.staff_no})</h3>
+                <p className="text-xs text-gray-600">{e.course_name} • {e.department}</p>
                 <p className="text-xs text-red-600 mt-1">Locked: {e.locked_reason}</p>
               </div>
-              <button onClick={() => unlockTraining(e.id)} className="px-4 py-2 bg-green-600 text-white rounded">
+              <button onClick={() => unlockTraining(e.id)} className="w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded text-sm">
                 Unlock Training
               </button>
             </div>
           ))}
-          {lockedEnrollments.length === 0 && <p className="text-center text-gray-500 py-8">No locked enrollments.</p>}
+          {lockedEnrollments.length === 0 && <p className="text-center text-gray-500 py-8 text-sm">No locked enrollments.</p>}
         </div>
       )}
     </div>
