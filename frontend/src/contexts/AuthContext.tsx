@@ -36,22 +36,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
+      console.log('🔐 Login attempt:', { email, apiUrl: API_URL });
+      
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
 
+      console.log('📡 Response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Login success:', { userId: data.user?.id, role: data.user?.role });
         setToken(data.token);
         setUser(data.user);
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         return true;
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Login failed:', { status: response.status, error: errorData.error });
+        return false;
       }
-      return false;
     } catch (error) {
+      console.error('❌ Login error:', error);
       return false;
     }
   };

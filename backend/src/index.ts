@@ -97,12 +97,28 @@ io.on('connection', (socket) => {
 app.locals.io = io;
 
 // Health check (public)
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'unknown';
+  let adminUser = null;
+  
+  try {
+    const { query } = await import('./database');
+    const result = await query('SELECT COUNT(*) as count FROM users');
+    dbStatus = 'connected';
+    
+    const adminResult = await query('SELECT email, role FROM users WHERE email = $1', ['admin@fleet.local']);
+    adminUser = adminResult.length > 0 ? adminResult[0] : null;
+  } catch (err) {
+    dbStatus = 'error: ' + (err as Error).message;
+  }
+  
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || '1.0.0',
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    database: dbStatus,
+    adminUser: adminUser ? { email: adminUser.email, role: adminUser.role } : null
   });
 });
 
