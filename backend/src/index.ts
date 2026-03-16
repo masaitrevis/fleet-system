@@ -5,7 +5,7 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { initDatabase } from './database';
+import { initDatabase, runMigrations } from './database';
 import { authenticateToken } from './middleware/auth';
 import { requestLogger, errorLogger } from './middleware/logger';
 import { rateLimiter, authRateLimiter } from './middleware/rateLimiter';
@@ -201,6 +201,7 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await initDatabase();
+    await runMigrations(); // Run additional migrations
     
     httpServer.listen(PORT, () => {
       console.log(`🚀 Fleet API + WebSocket running on http://localhost:${PORT}`);

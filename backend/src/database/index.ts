@@ -1366,6 +1366,25 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
   console.log('🔧 Migrations complete');
 };
 
+// Separate migration function for complex operations
+export const runMigrations = async () => {
+  if (!pool) throw new Error('Database not initialized');
+  
+  console.log('🔧 Running additional migrations...');
+  
+  // Add deleted_at to staff table for consistency
+  try {
+    await pool.query(`
+      ALTER TABLE staff 
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id)
+    `);
+    console.log('✅ Staff soft-delete columns added');
+  } catch (err: any) {
+    console.error('❌ Staff migration failed:', err.message);
+  }
+};
+
 export const query = async (sql: string, params?: any[]): Promise<any> => {
   if (!pool) throw new Error('Database not initialized');
   
