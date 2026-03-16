@@ -22,6 +22,7 @@ import { getEffectiveRole } from './utils/roles';
 import Admin from './components/Admin';
 import OperationsDashboard from './components/OperationsDashboard';
 import Workshop from './components/Workshop/Workshop';
+import AIChatbot from './components/AIChatbot';
 
 export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'training' | 'requisitions' | 'security' | 'integrations' | 'operations' | 'workshop' | 'admin';
 
@@ -173,6 +174,9 @@ function AppContent() {
           {renderView()}
         </ErrorBoundary>
       </main>
+
+      {/* AI Chatbot */}
+      <AIChatbot apiUrl={API_URL} />
     </div>
   );
 }
