@@ -374,6 +374,129 @@ const createTables = async () => {
     )
   `);
 
+  // ==================== ACCIDENTS TABLES ====================
+  
+  // Main accidents table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accidents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      case_number VARCHAR(50) UNIQUE NOT NULL,
+      accident_date TIMESTAMP NOT NULL,
+      gps_location VARCHAR(255),
+      route_id UUID REFERENCES routes(id),
+      vehicle_id UUID REFERENCES vehicles(id),
+      driver_id UUID REFERENCES staff(id),
+      accident_type VARCHAR(100),
+      severity VARCHAR(50),
+      injuries_reported BOOLEAN DEFAULT false,
+      police_notified BOOLEAN DEFAULT false,
+      third_party_involved BOOLEAN DEFAULT false,
+      weather_condition VARCHAR(100),
+      road_condition VARCHAR(100),
+      incident_description TEXT,
+      reported_by UUID REFERENCES users(id),
+      status VARCHAR(50) DEFAULT 'Reported',
+      closed_by UUID REFERENCES users(id),
+      closed_at TIMESTAMP,
+      closure_remarks TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Accident witnesses
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accident_witnesses (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      accident_id UUID REFERENCES accidents(id) ON DELETE CASCADE,
+      witness_name VARCHAR(255) NOT NULL,
+      witness_contact VARCHAR(255),
+      witness_statement TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Accident evidence (photos, documents)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accident_evidence (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      accident_id UUID REFERENCES accidents(id) ON DELETE CASCADE,
+      evidence_type VARCHAR(50) NOT NULL,
+      file_url VARCHAR(500) NOT NULL,
+      description TEXT,
+      uploaded_by UUID REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Accident investigations
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accident_investigations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      accident_id UUID REFERENCES accidents(id) ON DELETE CASCADE,
+      investigator_id UUID REFERENCES staff(id),
+      investigation_date TIMESTAMP,
+      scene_findings TEXT,
+      vehicle_condition_assessment TEXT,
+      driver_condition_assessment TEXT,
+      valid_license BOOLEAN,
+      driver_training_compliant BOOLEAN,
+      speed_compliance VARCHAR(50),
+      fatigue_status VARCHAR(100),
+      alcohol_drug_test VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Root cause analysis
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accident_root_causes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      accident_id UUID REFERENCES accidents(id) ON DELETE CASCADE,
+      primary_category VARCHAR(100),
+      primary_cause TEXT,
+      contributing_factors JSONB,
+      driver_causes JSONB,
+      vehicle_causes JSONB,
+      environmental_causes JSONB,
+      organizational_causes JSONB,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // CAPA (Corrective and Preventive Actions)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accident_capa (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      accident_id UUID REFERENCES accidents(id) ON DELETE CASCADE,
+      action_description TEXT NOT NULL,
+      responsible_person_id UUID REFERENCES staff(id),
+      target_completion_date DATE,
+      actual_completion_date DATE,
+      priority VARCHAR(20) DEFAULT 'Medium',
+      status VARCHAR(50) DEFAULT 'Open',
+      completion_notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Lessons learned
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accident_lessons (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      accident_id UUID REFERENCES accidents(id) ON DELETE CASCADE,
+      key_lesson TEXT NOT NULL,
+      preventive_recommendations TEXT,
+      training_required BOOLEAN DEFAULT false,
+      training_details TEXT,
+      policy_update_needed BOOLEAN DEFAULT false,
+      policy_update_details TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // ==================== CREATE INDEXES ====================
   await createIndexes();
 
@@ -393,6 +516,16 @@ const createIndexes = async () => {
     { name: 'idx_staff_role', table: 'staff', column: 'role' },
     { name: 'idx_staff_department', table: 'staff', column: 'department' },
     { name: 'idx_staff_deleted_at', table: 'staff', column: 'deleted_at' },
+    
+    // Accidents indexes
+    { name: 'idx_accidents_vehicle_id', table: 'accidents', column: 'vehicle_id' },
+    { name: 'idx_accidents_driver_id', table: 'accidents', column: 'driver_id' },
+    { name: 'idx_accidents_date', table: 'accidents', column: 'accident_date' },
+    { name: 'idx_accidents_status', table: 'accidents', column: 'status' },
+    { name: 'idx_accidents_case_number', table: 'accidents', column: 'case_number' },
+    { name: 'idx_accident_witnesses_accident_id', table: 'accident_witnesses', column: 'accident_id' },
+    { name: 'idx_accident_evidence_accident_id', table: 'accident_evidence', column: 'accident_id' },
+    { name: 'idx_accident_investigations_accident_id', table: 'accident_investigations', column: 'accident_id' },
     
     // Routes indexes
     { name: 'idx_routes_vehicle_id', table: 'routes', column: 'vehicle_id' },
