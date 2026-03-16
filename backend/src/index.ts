@@ -28,9 +28,11 @@ import auditRoutes from './routes/audits';
 import trainingRoutes from './routes/training';
 import auditScheduleRoutes from './routes/audit-schedules';
 import integrationRoutes from './routes/integrations';
+import operationsRoutes from './routes/operations';
 
-// Import services for webhooks
+// Import services for webhooks and operations
 import * as webhookService from './services/webhook';
+import * as operationsAI from './services/operationsAI';
 
 dotenv.config();
 
@@ -119,6 +121,9 @@ app.use('/api/audit-schedules', authenticateToken, auditScheduleRoutes);
 // Integration routes (includes public API with API key auth)
 app.use('/api/integrations', integrationRoutes);
 
+// Operations routes (AI features, live status, fleet health)
+app.use('/api/operations', authenticateToken, operationsRoutes);
+
 // Error logging (before error handler)
 app.use(errorLogger);
 
@@ -137,7 +142,14 @@ const startServer = async () => {
       console.log(`🚀 Fleet API + WebSocket running on http://localhost:${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🔒 JWT Secret: ${process.env.JWT_SECRET ? 'Configured' : 'NOT SET'}`);
+      console.log(`🤖 Operations AI: Enabled`);
     });
+    
+    // Broadcast operations updates every 30 seconds
+    setInterval(() => {
+      operationsAI.broadcastOperationsUpdate().catch(console.error);
+    }, 30000);
+    
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

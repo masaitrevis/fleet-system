@@ -20,8 +20,9 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { getEffectiveRole } from './utils/roles';
 
 import Admin from './components/Admin';
+import OperationsDashboard from './components/OperationsDashboard';
 
-export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'training' | 'requisitions' | 'security' | 'integrations' | 'admin';
+export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'training' | 'requisitions' | 'security' | 'integrations' | 'operations' | 'admin';
 
 // Force correct API URL - env vars not reliable in Netlify
 const API_URL = 'https://fleet-api-0272.onrender.com/api';
@@ -45,6 +46,7 @@ function AppContent() {
     { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
     { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager', 'hod'] },
     { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
+    { key: 'operations', label: 'Operations', icon: '📺', roles: ['admin', 'manager', 'transport_supervisor', 'hod'] },
     { key: 'fuel', label: 'Fuel', icon: '⛽', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
     { key: 'repairs', label: 'Repairs', icon: '🔧', roles: ['admin', 'manager', 'transport_supervisor', 'hod'] },
     { key: 'analytics', label: 'Analytics', icon: '📈', roles: ['admin', 'manager', 'hod'] },
@@ -71,6 +73,7 @@ function AppContent() {
       case 'accidents': return <Accidents apiUrl={API_URL} user={user} />;
       case 'audits': return <Audits apiUrl={API_URL} user={user} />;
       case 'training': return <Training apiUrl={API_URL} user={user} />;
+      case 'operations': return <OperationsDashboard apiUrl={API_URL} user={user} />;
       case 'fleet': return <Fleet apiUrl={API_URL} />;
       case 'staff': return <Staff apiUrl={API_URL} />;
       case 'routes': return <Routes apiUrl={API_URL} />;
