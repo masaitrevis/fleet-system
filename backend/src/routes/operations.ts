@@ -338,4 +338,66 @@ router.get('/dashboard-summary',
   })
 );
 
+// ==================== ADVANCED AI FEATURES ====================
+
+// Driver behavior analysis
+router.get('/driver-behavior',
+  authenticateToken,
+  requireRole(['admin', 'manager', 'transport_supervisor', 'hod']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { driverId } = req.query;
+    const analysis = await aiService.analyzeDriverBehavior(driverId as string);
+    res.json({
+      aiEnabled: aiService.AI_ENABLED,
+      analysis
+    });
+  })
+);
+
+// Anomaly detection
+router.get('/anomalies',
+  authenticateToken,
+  requireRole(['admin', 'manager', 'transport_supervisor']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const anomalies = await aiService.detectAnomalies();
+    res.json({
+      aiEnabled: aiService.AI_ENABLED,
+      count: anomalies.length,
+      anomalies
+    });
+  })
+);
+
+// Predictive cost analysis
+router.get('/cost-forecast',
+  authenticateToken,
+  requireRole(['admin', 'manager', 'hod']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { vehicleId } = req.query;
+    const forecasts = await aiService.predictMaintenanceCosts(vehicleId as string);
+    res.json({
+      aiEnabled: aiService.AI_ENABLED,
+      forecasts
+    });
+  })
+);
+
+// AI Chatbot
+router.post('/chat',
+  authenticateToken,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { messages } = req.body;
+    
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'Messages array required' });
+    }
+    
+    const response = await aiService.processChatQuery(messages);
+    res.json({
+      aiEnabled: aiService.AI_ENABLED,
+      response
+    });
+  })
+);
+
 export default router;

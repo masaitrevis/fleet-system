@@ -64,11 +64,28 @@ const createTables = async () => {
       department VARCHAR(100),
       branch VARCHAR(100),
       role VARCHAR(50) DEFAULT 'Driver',
+      safety_score INTEGER DEFAULT 100,
       comments TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       deleted_at TIMESTAMP,
       deleted_by UUID REFERENCES users(id)
+    )
+  `);
+  
+  // Driver behavior scores history
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS driver_behavior_scores (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      driver_id UUID REFERENCES staff(id) ON DELETE CASCADE,
+      score_date DATE DEFAULT CURRENT_DATE,
+      overall_score INTEGER,
+      fuel_efficiency_score INTEGER,
+      safety_score INTEGER,
+      reliability_score INTEGER,
+      risk_level VARCHAR(20),
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
