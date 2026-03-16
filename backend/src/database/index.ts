@@ -15,7 +15,10 @@ export const initDatabase = async () => {
     connectionString,
     ssl: {
       rejectUnauthorized: false // Required for Render PostgreSQL
-    }
+    },
+    max: 20, // Maximum number of clients in the pool
+    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+    connectionTimeoutMillis: 5000 // Return error after 5 seconds if connection not established
   });
 
   // Test connection
@@ -43,7 +46,9 @@ const createTables = async () => {
       password_hash VARCHAR(255) NOT NULL,
       role VARCHAR(50) DEFAULT 'viewer',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP,
+      deleted_by UUID REFERENCES users(id)
     )
   `);
 
@@ -61,7 +66,9 @@ const createTables = async () => {
       role VARCHAR(50) DEFAULT 'Driver',
       comments TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP,
+      deleted_by UUID REFERENCES users(id)
     )
   `);
 
@@ -89,7 +96,9 @@ const createTables = async () => {
       defect_notes TEXT,
       defect_reported_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP,
+      deleted_by UUID REFERENCES users(id)
     )
   `);
 
@@ -260,7 +269,191 @@ const createTables = async () => {
     )
   `);
 
-  console.log('✅ Tables created');
+  // ==================== INTEGRATION TABLES ====================
+
+  // API Keys table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      key_hash VARCHAR(255) UNIQUE NOT NULL,
+      key_prefix VARCHAR(20) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      created_by UUID REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_used_at TIMESTAMP,
+      expires_at TIMESTAMP,
+      is_active BOOLEAN DEFAULT true,
+      permissions JSONB DEFAULT '["read"]',
+      rate_limit_per_minute INTEGER DEFAULT 60,
+      metadata JSONB DEFAULT '{}'
+    )
+  `);
+
+  // Webhooks table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS webhooks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(255) NOT NULL,
+      url VARCHAR(500) NOT NULL,
+      secret VARCHAR(255) NOT NULL,
+      events JSONB NOT NULL,
+      is_active BOOLEAN DEFAULT true,
+      created_by UUID REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_triggered_at TIMESTAMP,
+      failure_count INTEGER DEFAULT 0,
+      headers JSONB DEFAULT '{}'
+    )
+  `);
+
+  // Webhook delivery logs table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      webhook_id UUID REFERENCES webhooks(id) ON DELETE CASCADE,
+      event_type VARCHAR(100) NOT NULL,
+      payload JSONB NOT NULL,
+      response_status INTEGER,
+      response_body TEXT,
+      error_message TEXT,
+      attempt_number INTEGER DEFAULT 1,
+      delivered_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // API usage logs table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_usage_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      api_key_id UUID REFERENCES api_keys(id) ON DELETE SET NULL,
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      endpoint VARCHAR(255) NOT NULL,
+      method VARCHAR(10) NOT NULL,
+      status_code INTEGER,
+      response_time_ms INTEGER,
+      ip_address INET,
+      user_agent TEXT,
+      request_body JSONB,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Integrations configuration table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS integrations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      type VARCHAR(50) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      provider VARCHAR(100) NOT NULL,
+      config JSONB NOT NULL,
+      is_active BOOLEAN DEFAULT false,
+      last_sync_at TIMESTAMP,
+      created_by UUID REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(type, provider)
+    )
+  `);
+
+  // System audit logs table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS system_audit_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      action VARCHAR(100) NOT NULL,
+      entity_type VARCHAR(50) NOT NULL,
+      entity_id UUID,
+      old_values JSONB,
+      new_values JSONB,
+      ip_address INET,
+      user_agent TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // ==================== CREATE INDEXES ====================
+  await createIndexes();
+
+// Create database indexes for performance
+const createIndexes = async () => {
+  if (!pool) return;
+
+  const indexes = [
+    // Vehicles indexes
+    { name: 'idx_vehicles_status', table: 'vehicles', column: 'status' },
+    { name: 'idx_vehicles_department', table: 'vehicles', column: 'department' },
+    { name: 'idx_vehicles_deleted_at', table: 'vehicles', column: 'deleted_at' },
+    { name: 'idx_vehicles_registration', table: 'vehicles', column: 'registration_num' },
+    
+    // Staff indexes
+    { name: 'idx_staff_email', table: 'staff', column: 'email' },
+    { name: 'idx_staff_role', table: 'staff', column: 'role' },
+    { name: 'idx_staff_department', table: 'staff', column: 'department' },
+    { name: 'idx_staff_deleted_at', table: 'staff', column: 'deleted_at' },
+    
+    // Routes indexes
+    { name: 'idx_routes_vehicle_id', table: 'routes', column: 'vehicle_id' },
+    { name: 'idx_routes_driver1_id', table: 'routes', column: 'driver1_id' },
+    { name: 'idx_routes_date', table: 'routes', column: 'route_date' },
+    
+    // Fuel records indexes
+    { name: 'idx_fuel_vehicle_id', table: 'fuel_records', column: 'vehicle_id' },
+    { name: 'idx_fuel_date', table: 'fuel_records', column: 'fuel_date' },
+    
+    // Requisitions indexes
+    { name: 'idx_requisitions_status', table: 'requisitions', column: 'status' },
+    { name: 'idx_requisitions_requested_by', table: 'requisitions', column: 'requested_by' },
+    { name: 'idx_requisitions_vehicle_id', table: 'requisitions', column: 'vehicle_id' },
+    { name: 'idx_requisitions_driver_id', table: 'requisitions', column: 'driver_id' },
+    
+    // Repairs indexes
+    { name: 'idx_repairs_vehicle_id', table: 'repairs', column: 'vehicle_id' },
+    { name: 'idx_repairs_status', table: 'repairs', column: 'status' },
+    
+    // Job cards indexes
+    { name: 'idx_job_cards_vehicle_id', table: 'job_cards', column: 'vehicle_id' },
+    { name: 'idx_job_cards_status', table: 'job_cards', column: 'status' },
+    { name: 'idx_job_cards_number', table: 'job_cards', column: 'job_card_number' },
+    
+    // Training indexes
+    { name: 'idx_training_enrollments_staff', table: 'training_enrollments', column: 'staff_id' },
+    { name: 'idx_training_enrollments_course', table: 'training_enrollments', column: 'course_id' },
+    { name: 'idx_training_courses_code', table: 'training_courses', column: 'course_code' },
+    
+    // API Keys indexes
+    { name: 'idx_api_keys_hash', table: 'api_keys', column: 'key_hash' },
+    { name: 'idx_api_keys_prefix', table: 'api_keys', column: 'key_prefix' },
+    { name: 'idx_api_keys_active', table: 'api_keys', column: 'is_active' },
+    
+    // Webhook indexes
+    { name: 'idx_webhooks_active', table: 'webhooks', column: 'is_active' },
+    { name: 'idx_webhook_deliveries_webhook_id', table: 'webhook_deliveries', column: 'webhook_id' },
+    
+    // API usage indexes
+    { name: 'idx_api_usage_created', table: 'api_usage_logs', column: 'created_at' },
+    { name: 'idx_api_usage_key', table: 'api_usage_logs', column: 'api_key_id' },
+    
+    // Audit logs indexes
+    { name: 'idx_audit_logs_user', table: 'system_audit_logs', column: 'user_id' },
+    { name: 'idx_audit_logs_created', table: 'system_audit_logs', column: 'created_at' },
+    { name: 'idx_audit_logs_entity', table: 'system_audit_logs', column: 'entity_type, entity_id' }
+  ];
+
+  for (const idx of indexes) {
+    try {
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS ${idx.name} ON ${idx.table}(${idx.column})
+      `);
+    } catch (err) {
+      console.warn(`⚠️ Failed to create index ${idx.name}:`, (err as Error).message);
+    }
+  }
+  
+  console.log('✅ Database indexes created');
+};
   
   // Create training tables
   await createTrainingTables();
