@@ -731,23 +731,27 @@ const createIndexes = async (poolRef: any) => {
 
   // Create or reset default admin user
   if (pool) {
-    const adminResult = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', ['admin@fleet.local']);
-    const hashedPassword = bcrypt.hashSync('admin123', 10);
-    
-    if (adminResult.rows.length === 0) {
-      // Create new admin user
-      await pool.query(
-        'INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, $3, $4)',
-        [uuidv4(), 'admin@fleet.local', hashedPassword, 'admin']
-      );
-      console.log('✅ Default admin user created: admin@fleet.local / admin123');
-    } else {
-      // Reset password to ensure it's correct
-      await pool.query(
-        'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2',
-        [hashedPassword, 'admin@fleet.local']
-      );
-      console.log('✅ Admin password reset: admin@fleet.local / admin123');
+    try {
+      const adminResult = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', ['admin@fleet.local']);
+      const hashedPassword = bcrypt.hashSync('admin123', 10);
+      
+      if (adminResult.rows.length === 0) {
+        // Create new admin user
+        await pool.query(
+          'INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, $3, $4)',
+          [uuidv4(), 'admin@fleet.local', hashedPassword, 'admin']
+        );
+        console.log('✅ Default admin user created: admin@fleet.local / admin123');
+      } else {
+        // Reset password to ensure it's correct
+        await pool.query(
+          'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2',
+          [hashedPassword, 'admin@fleet.local']
+        );
+        console.log('✅ Admin password reset: admin@fleet.local / admin123');
+      }
+    } catch (err) {
+      console.error('❌ Error creating admin user:', err);
     }
   }
 };
