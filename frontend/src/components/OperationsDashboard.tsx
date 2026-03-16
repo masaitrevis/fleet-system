@@ -40,8 +40,8 @@ interface Alert {
   actionRequired: boolean;
 }
 
-export default function OperationsDashboard({ apiUrl, user }: OperationsDashboardProps) {
-  const [socket, setSocket] = useState<Socket | null>(null);
+export default function OperationsDashboard({ apiUrl }: OperationsDashboardProps) {
+  const [, setSocket] = useState<Socket | null>(null);
   const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null);
   const [fleetHealth, setFleetHealth] = useState<FleetHealth | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -245,7 +245,7 @@ export default function OperationsDashboard({ apiUrl, user }: OperationsDashboar
                 value={`${fleetHealth?.averageHealth || 0}%`}
                 subtitle={`${fleetHealth?.critical || 0} critical`}
                 icon="❤️"
-                color={fleetHealth?.averageHealth >= 80 ? 'green' : fleetHealth?.averageHealth >= 60 ? 'yellow' : 'red'}
+                color={(fleetHealth?.averageHealth || 0) >= 80 ? 'green' : (fleetHealth?.averageHealth || 0) >= 60 ? 'yellow' : 'red'}
               />
               <KPICard
                 title="Available Vehicles"

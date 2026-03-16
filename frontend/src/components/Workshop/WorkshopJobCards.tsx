@@ -10,11 +10,13 @@ interface JobCard {
   vehicle_id: string;
   registration_num: string;
   defect_description: string;
+  breakdown_description?: string;
   repair_type: string;
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
   status: 'Pending' | 'Approved' | 'In Progress' | 'Completed' | 'Cancelled';
   estimated_cost: number;
   actual_cost: number;
+  cost?: number;
   target_hours: number;
   actual_hours: number;
   reported_by_name: string;
@@ -157,7 +159,7 @@ export default function WorkshopJobCards({ apiUrl }: WorkshopJobCardsProps) {
     }
   };
 
-  const updateJobCardStatus = async (id: string, status: string) => {
+  const updateJobCardStatus = async (id: string, _status: string) => {
     try {
       const res = await fetch(`${apiUrl}/repairs/${id}/complete`, {
         method: 'PUT',
@@ -333,7 +335,7 @@ export default function WorkshopJobCards({ apiUrl }: WorkshopJobCardsProps) {
         </form>
       )}
 
-      <!-- Defective Vehicles Alert -->
+      {/*  Defective Vehicles Alert  */}
       {defectiveVehicles.length > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
           <h4 className="font-semibold text-orange-800 mb-2">⚠️ {defectiveVehicles.length} Vehicle(s) Need Attention</h4>
@@ -379,7 +381,7 @@ export default function WorkshopJobCards({ apiUrl }: WorkshopJobCardsProps) {
                       {jc.status}
                     </span>
                   </td>
-                  <td className="p-3 text-right">${parseFloat(jc.estimated_cost || jc.cost || 0).toFixed(2)}</td>
+                  <td className="p-3 text-right">${parseFloat(String(jc.estimated_cost || jc.cost || 0)).toFixed(2)}</td>
                   <td className="p-3 text-center">
                     <button
                       onClick={() => setSelectedJobCard(jc)}
@@ -454,7 +456,7 @@ function JobCardDetailModal({ jobCard, availableParts, onClose, onUpdateStatus, 
             <p className="text-gray-700 bg-gray-50 p-3 rounded">{jobCard.defect_description || jobCard.breakdown_description || 'No description'}</p>
           </div>
 
-          <!-- Add Parts Section -->
+          {/*  Add Parts Section  */}
           <div className="border-t pt-4 mb-6">
             <h4 className="font-semibold mb-3">Add Parts</h4>
             <div className="flex gap-2">
@@ -493,7 +495,7 @@ function JobCardDetailModal({ jobCard, availableParts, onClose, onUpdateStatus, 
             </div>
           </div>
 
-          <!-- Actions -->
+          {/*  Actions  */}
           <div className="flex gap-2">
             {jobCard.status !== 'Completed' && (
               <>

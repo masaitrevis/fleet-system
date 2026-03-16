@@ -202,7 +202,7 @@ export default function WorkshopInvoices({ apiUrl }: WorkshopInvoicesProps) {
                   <td className="p-3">{inv.customer_name || 'Walk-in Customer'}</td>
                   <td className="p-3">{new Date(inv.invoice_date).toLocaleDateString()}</td>
                   <td className="p-3 text-right font-medium">${parseFloat(inv.total as any).toFixed(2)}</td>
-                  <td className="p-3 text-right">${parseFloat(inv.amount_paid || 0).toFixed(2)}</td>
+                  <td className="p-3 text-right">${parseFloat(String(inv.amount_paid || 0)).toFixed(2)}</td>
                   <td className="p-3 text-center">
                     <span className={`px-2 py-1 rounded text-xs ${STATUS_COLORS[inv.status]}`}>
                       {inv.status}
@@ -292,7 +292,7 @@ function InvoiceDetailModal({ invoice, onClose, onUpdateStatus, onRecordPayment 
             </div>
           </div>
 
-          <!-- Items -->
+          {/*  Items  */}
           <div className="border rounded-lg overflow-hidden mb-6">
             <table className="w-full">
               <thead className="bg-gray-50">
@@ -364,7 +364,7 @@ function InvoiceDetailModal({ invoice, onClose, onUpdateStatus, onRecordPayment 
             </div>
           </div>
 
-          <!-- Record Payment -->
+          {/*  Record Payment  */}
           {remaining > 0 && (
             <div className="border-t pt-4">
               <h4 className="font-semibold mb-3">Record Payment</h4>
@@ -401,7 +401,7 @@ function InvoiceDetailModal({ invoice, onClose, onUpdateStatus, onRecordPayment 
             </div>
           )}
 
-          <!-- Payment History -->
+          {/*  Payment History  */}
           {invoice.payments?.length > 0 && (
             <div className="border-t pt-4 mt-4">
               <h4 className="font-semibold mb-3">Payment History</h4>

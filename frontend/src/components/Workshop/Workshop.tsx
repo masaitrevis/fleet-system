@@ -10,7 +10,7 @@ interface WorkshopProps {
 
 type WorkshopTab = 'overview' | 'job-cards' | 'stock' | 'invoices';
 
-export default function Workshop({ apiUrl, user }: WorkshopProps) {
+export default function Workshop({ apiUrl }: WorkshopProps) {
   const [activeTab, setActiveTab] = useState<WorkshopTab>('overview');
   const [stats, setStats] = useState<any>(null);
   const token = localStorage.getItem('token');
