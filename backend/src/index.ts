@@ -60,9 +60,28 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// CORS configuration
+// CORS configuration - allow multiple origins
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'https://masaitrevis.github.io',
+  'https://masaitrevis.github.io/fleet-system',
+  'https://fleet-pro-git-master-masaitrevis-projects.vercel.app',
+  'https://fleet-pro.vercel.app'
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "*",
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Log rejected origins for debugging
+    console.log('🚫 CORS rejected origin:', origin);
+    callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
   credentials: true
