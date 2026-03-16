@@ -14,7 +14,7 @@ interface VehicleHealth {
 }
 
 // Calculate predictive maintenance scores
-export const analyzeVehicleHealth = async (vehicleId?: string): Promise<VehicleHealth | VehicleHealth[]> = {
+export const analyzeVehicleHealth = async (vehicleId?: string): Promise<VehicleHealth | VehicleHealth[] | null> => {
   const whereClause = vehicleId ? 'WHERE v.id = $1' : '';
   const params = vehicleId ? [vehicleId] : [];
   

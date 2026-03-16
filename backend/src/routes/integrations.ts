@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { authenticateToken, requireRole } from '../middleware/auth';
 import { authenticateApiKey, requireApiPermission } from '../middleware/apiAuth';
 import { rateLimiter, apiKeyRateLimiter } from '../middleware/rateLimiter';
@@ -15,7 +15,7 @@ const router = Router();
 router.post('/api-keys', 
   authenticateToken, 
   requireRole(['admin']),
-  asyncHandler(async (req: any, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { name, description, permissions, expiresInDays, rateLimitPerMinute } = req.body;
     
     if (!name) {
@@ -50,7 +50,7 @@ router.post('/api-keys',
 router.get('/api-keys',
   authenticateToken,
   requireRole(['admin']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const keys = await apiKeyService.getApiKeys();
     res.json(keys);
   })
@@ -60,7 +60,7 @@ router.get('/api-keys',
 router.delete('/api-keys/:id',
   authenticateToken,
   requireRole(['admin']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const success = await apiKeyService.revokeApiKey(req.params.id);
     if (!success) {
       throw Errors.NotFound('API key');
@@ -73,7 +73,7 @@ router.delete('/api-keys/:id',
 router.get('/api-keys/:id/usage',
   authenticateToken,
   requireRole(['admin']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const days = parseInt(req.query.days as string) || 7;
     const stats = await apiKeyService.getApiUsageStats(req.params.id, days);
     res.json(stats);
@@ -86,7 +86,7 @@ router.get('/api-keys/:id/usage',
 router.post('/webhooks',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req: any, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { name, url, events, headers } = req.body;
     
     if (!name || !url || !events || !Array.isArray(events)) {
@@ -120,7 +120,7 @@ router.post('/webhooks',
 router.get('/webhooks',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const webhooks = await webhookService.getWebhooks();
     res.json(webhooks);
   })
@@ -130,7 +130,7 @@ router.get('/webhooks',
 router.put('/webhooks/:id',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const webhook = await webhookService.updateWebhook(req.params.id, req.body);
     if (!webhook) {
       throw Errors.NotFound('Webhook');
@@ -143,7 +143,7 @@ router.put('/webhooks/:id',
 router.delete('/webhooks/:id',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const success = await webhookService.deleteWebhook(req.params.id);
     if (!success) {
       throw Errors.NotFound('Webhook');
@@ -156,7 +156,7 @@ router.delete('/webhooks/:id',
 router.post('/webhooks/:id/test',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const result = await webhookService.testWebhook(req.params.id);
     res.json(result);
   })
@@ -166,7 +166,7 @@ router.post('/webhooks/:id/test',
 router.get('/webhooks/:id/logs',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 50;
     const logs = await webhookService.getWebhookLogs(req.params.id, limit);
     res.json(logs);
@@ -180,7 +180,7 @@ router.get('/public/vehicles',
   apiKeyRateLimiter(100),
   authenticateApiKey,
   requireApiPermission('read'),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const result = await query(`
       SELECT id, registration_num, make_model, status, department, branch, current_mileage
       FROM vehicles
@@ -196,7 +196,7 @@ router.get('/public/vehicles/:id',
   apiKeyRateLimiter(100),
   authenticateApiKey,
   requireApiPermission('read'),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const result = await query(`
       SELECT id, registration_num, make_model, status, department, branch, 
              current_mileage, next_service_due, year_of_manufacture
@@ -217,7 +217,7 @@ router.get('/public/drivers',
   apiKeyRateLimiter(100),
   authenticateApiKey,
   requireApiPermission('read'),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const result = await query(`
       SELECT id, staff_name, email, phone, department, branch, role
       FROM staff
@@ -320,7 +320,7 @@ router.get('/public/maintenance/due',
   apiKeyRateLimiter(100),
   authenticateApiKey,
   requireApiPermission('read'),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const days = parseInt(req.query.days as string) || 30;
     
     const result = await query(`
@@ -338,7 +338,7 @@ router.get('/public/maintenance/due',
 
 // Webhook verification endpoint (public)
 router.post('/public/webhooks/verify',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { payload, signature, secret } = req.body;
     
     if (!payload || !signature || !secret) {
@@ -357,7 +357,7 @@ router.post('/public/webhooks/verify',
 router.get('/usage',
   authenticateToken,
   requireRole(['admin']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const days = parseInt(req.query.days as string) || 7;
     const stats = await apiKeyService.getApiUsageStats(undefined, days);
     res.json(stats);

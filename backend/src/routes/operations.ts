@@ -10,7 +10,7 @@ const router = Router();
 router.get('/live-status',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor', 'hod']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const status = await operationsAI.getLiveFleetStatus();
     res.json(status);
   })
@@ -20,7 +20,7 @@ router.get('/live-status',
 router.get('/fleet-health',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor', 'hod']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const health = await operationsAI.getFleetHealthSummary();
     res.json(health);
   })
@@ -30,7 +30,7 @@ router.get('/fleet-health',
 router.get('/fleet-health/:vehicleId',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor', 'hod']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const health = await operationsAI.analyzeVehicleHealth(req.params.vehicleId);
     if (!health) {
       throw Errors.NotFound('Vehicle health data');
@@ -43,7 +43,7 @@ router.get('/fleet-health/:vehicleId',
 router.post('/optimize-route',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { stops, startLocation, endLocation, constraints } = req.body;
     
     if (!stops || !Array.isArray(stops) || stops.length === 0) {
@@ -69,7 +69,7 @@ router.post('/optimize-route',
 router.get('/alerts',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor', 'hod']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { severity = 'all' } = req.query;
     
     // Get fleet health to generate alerts
@@ -173,7 +173,7 @@ router.get('/alerts',
 router.get('/ai-recommendations',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const health = await operationsAI.getFleetHealthSummary();
     const status = await operationsAI.getLiveFleetStatus();
     
@@ -261,7 +261,7 @@ router.get('/ai-recommendations',
 router.get('/dashboard-summary',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor', 'hod']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const today = new Date().toISOString().split('T')[0];
     
     // Weekly stats

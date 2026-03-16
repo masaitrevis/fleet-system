@@ -11,7 +11,7 @@ const router = Router();
 // Get all stock parts
 router.get('/parts',
   authenticateToken,
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { category, low_stock } = req.query;
     
     let sql = `
@@ -43,7 +43,7 @@ router.get('/parts',
 // Get single part
 router.get('/parts/:id',
   authenticateToken,
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const part = await query(`
       SELECT sp.*, 
         COALESCE(SUM(su.quantity_used), 0) as total_used,
@@ -78,7 +78,7 @@ router.get('/parts/:id',
 router.post('/parts',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const {
       part_number, part_name, description, category,
       manufacturer, supplier, unit_cost, quantity_on_hand,
@@ -112,7 +112,7 @@ router.post('/parts',
 router.put('/parts/:id',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const updates = req.body;
     const allowedFields = [
       'part_name', 'description', 'category', 'manufacturer', 'supplier',
@@ -152,7 +152,7 @@ router.put('/parts/:id',
 router.post('/parts/:id/adjust',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { adjustment, reason } = req.body;
     
     if (!adjustment || isNaN(adjustment)) {
@@ -181,7 +181,7 @@ router.post('/parts/:id/adjust',
 router.post('/usage',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { part_id, quantity_used, unit_cost, repair_id, job_card_id, notes } = req.body;
     
     if (!part_id || !quantity_used) {
@@ -232,7 +232,7 @@ router.post('/usage',
 router.get('/usage-report',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { start_date, end_date, category } = req.query;
     
     let sql = `
@@ -275,7 +275,7 @@ router.get('/usage-report',
 // Get all invoices
 router.get('/invoices',
   authenticateToken,
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { status, customer_id, start_date, end_date } = req.query;
     
     let sql = `
@@ -318,7 +318,7 @@ router.get('/invoices',
 // Get single invoice
 router.get('/invoices/:id',
   authenticateToken,
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const invoice = await query(`
       SELECT i.*, c.customer_name, c.customer_email, c.customer_phone, c.customer_address
       FROM invoices i
@@ -349,7 +349,7 @@ router.get('/invoices/:id',
 router.post('/invoices/from-job-card',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { job_card_id, customer_id, labor_hours, labor_rate } = req.body;
     
     if (!job_card_id) {
@@ -449,7 +449,7 @@ router.post('/invoices/from-job-card',
 router.patch('/invoices/:id/status',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { status } = req.body;
     const validStatuses = ['Draft', 'Sent', 'Paid', 'Overdue', 'Cancelled'];
     
@@ -471,7 +471,7 @@ router.patch('/invoices/:id/status',
 router.post('/invoices/:id/payments',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { amount, payment_method, reference, notes } = req.body;
     
     if (!amount || amount <= 0) {
@@ -516,7 +516,7 @@ router.post('/invoices/:id/payments',
 router.get('/financial-summary',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const { period } = req.query; // 'month', 'quarter', 'year'
     
     let dateFilter = '';

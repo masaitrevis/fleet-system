@@ -617,11 +617,12 @@ const createTables = async () => {
   `);
 
   // ==================== CREATE INDEXES ====================
-  await createIndexes();
+  await createIndexes(pool);
+};
 
 // Create database indexes for performance
-const createIndexes = async () => {
-  if (!pool) return;
+const createIndexes = async (poolRef: any) => {
+  if (!poolRef) return;
 
   const indexes = [
     // Vehicles indexes
@@ -712,7 +713,7 @@ const createIndexes = async () => {
 
   for (const idx of indexes) {
     try {
-      await pool.query(`
+      await poolRef.query(`
         CREATE INDEX IF NOT EXISTS ${idx.name} ON ${idx.table}(${idx.column})
       `);
     } catch (err) {
@@ -721,23 +722,24 @@ const createIndexes = async () => {
   }
   
   console.log('✅ Database indexes created');
-};
-  
+
   // Create training tables
   await createTrainingTables();
-  
+
   // Create audit tables and seed templates
   await createAuditTables();
-  
+
   // Create default admin user
-  const adminResult = await pool.query('SELECT id FROM users WHERE email = $1', ['admin@fleet.local']);
-  if (adminResult.rows.length === 0) {
-    const hashedPassword = bcrypt.hashSync('admin123', 10);
-    await pool.query(
-      'INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, $3, $4)',
-      [uuidv4(), 'admin@fleet.local', hashedPassword, 'admin']
-    );
-    console.log('✅ Default admin user created: admin@fleet.local / admin123');
+  if (pool) {
+    const adminResult = await pool.query('SELECT id FROM users WHERE email = $1', ['admin@fleet.local']);
+    if (adminResult.rows.length === 0) {
+      const hashedPassword = bcrypt.hashSync('admin123', 10);
+      await pool.query(
+        'INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, $3, $4)',
+        [uuidv4(), 'admin@fleet.local', hashedPassword, 'admin']
+      );
+      console.log('✅ Default admin user created: admin@fleet.local / admin123');
+    }
   }
 };
 

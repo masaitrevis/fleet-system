@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 const router = Router();
 
 // JWT_SECRET must be set in environment - no fallback for security
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is required');
   process.exit(1);
