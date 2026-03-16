@@ -53,10 +53,13 @@ export default function RiskAlertsPanel({
         setAlerts(filteredAlerts.slice(0, limit));
         setError('');
       } else {
-        setError('Failed to load alerts');
+        const errData = await response.json().catch(() => ({}));
+        console.error('Risk alerts error:', errData);
+        setError(errData.message || errData.error || `Failed to load alerts (${response.status})`);
       }
-    } catch (err) {
-      setError('Network error');
+    } catch (err: any) {
+      console.error('Network error fetching alerts:', err);
+      setError(`Network error: ${err.message}`);
     } finally {
       setLoading(false);
     }

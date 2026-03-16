@@ -43,7 +43,11 @@ export default function Fleet({ apiUrl }: FleetProps) {
       const res = await fetch(`${apiUrl}/vehicles`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Failed to fetch vehicles');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error('Fleet fetch error:', errData);
+        throw new Error(errData.message || errData.error || `Failed to fetch vehicles (${res.status})`);
+      }
       const data = await res.json();
       setVehicles(Array.isArray(data) ? data : []);
     } catch (err: any) {

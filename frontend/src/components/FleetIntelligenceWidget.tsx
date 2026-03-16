@@ -42,11 +42,15 @@ export default function FleetIntelligenceWidget({ apiUrl }: FleetIntelligenceWid
       if (response.ok) {
         const data = await response.json();
         setSummary(data);
+        setError('');
       } else {
-        setError('Failed to load intelligence data');
+        const errData = await response.json().catch(() => ({}));
+        console.error('Fleet intelligence error:', errData);
+        setError(errData.message || errData.error || `Failed to load intelligence data (${response.status})`);
       }
-    } catch (err) {
-      setError('Network error');
+    } catch (err: any) {
+      console.error('Network error fetching intelligence:', err);
+      setError(`Network error: ${err.message}`);
     } finally {
       setLoading(false);
     }
