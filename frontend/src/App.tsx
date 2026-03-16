@@ -44,7 +44,7 @@ function AppContent() {
     { key: 'requisitions', label: 'Requisitions', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'dept_supervisor', 'hod'] },
     { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'hod', 'security'] },
     { key: 'audits', label: 'Audits', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer', 'transport_supervisor', 'hod'] },
-    { key: 'training', label: 'Training', icon: '🎓', roles: ['admin', 'manager', 'hod', 'driver'] },
+    { key: 'training', label: 'Training', icon: '🎓', roles: ['admin', 'manager', 'hod', 'driver', 'viewer', 'transport_supervisor', 'dept_supervisor', 'security', 'auditor'] },
     { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
     { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager', 'hod'] },
     { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },

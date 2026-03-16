@@ -768,34 +768,129 @@ Respond concisely (2-3 sentences). If you need specific data, suggest using the 
 const processRuleBasedChat = async (queryText: string): Promise<string> => {
   const lowerQuery = queryText.toLowerCase();
   
-  if (lowerQuery.includes('hello') || lowerQuery.includes('hi')) {
-    return 'Hello! I\'m FleetPro AI. How can I help you with your fleet today?';
+  // Greeting only when explicitly said
+  if (lowerQuery.match(/^(hello|hi|hey|greetings)$/)) {
+    return 'Hello! How can I help you with your fleet today?';
   }
   
-  if (lowerQuery.includes('vehicle') && (lowerQuery.includes('how many') || lowerQuery.includes('count'))) {
-    const result = await query('SELECT COUNT(*) as count FROM vehicles WHERE status = $1', ['Active']);
-    return `You currently have ${result[0]?.count || 0} active vehicles in your fleet.`;
+  // Vehicles under maintenance
+  if (lowerQuery.includes('maintenance') && lowerQuery.includes('vehicle')) {
+    const result = await query(
+      "SELECT COUNT(*) as count FROM vehicles WHERE status = 'Maintenance' AND deleted_at IS NULL"
+    );
+    const vehicles = await query(
+      "SELECT registration_num, current_mileage FROM vehicles WHERE status = 'Maintenance' AND deleted_at IS NULL LIMIT 5"
+    );
+    const count = result[0]?.count || 0;
+    if (count === 0) return 'No vehicles are currently under maintenance.';
+    let response = `${count} vehicle(s) currently under maintenance:`;
+    vehicles.forEach((v: any) => {
+      response += `\n• ${v.registration_num} (${v.current_mileage?.toLocaleString()} km)`;
+    });
+    return response;
   }
   
-  if (lowerQuery.includes('repair') || lowerQuery.includes('maintenance')) {
-    const result = await query("SELECT COUNT(*) as count FROM repairs WHERE status = 'Pending'");
-    return `There are ${result[0]?.count || 0} pending repairs. Check the Repairs module for details.`;
+  // Vehicle count/status
+  if (lowerQuery.includes('vehicle') && (lowerQuery.includes('how many') || lowerQuery.includes('count') || lowerQuery.includes('total'))) {
+    const total = await query('SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL');
+    const active = await query("SELECT COUNT(*) as count FROM vehicles WHERE status = 'Active' AND deleted_at IS NULL");
+    const maintenance = await query("SELECT COUNT(*) as count FROM vehicles WHERE status = 'Maintenance' AND deleted_at IS NULL");
+    return `Fleet Status:\n• Total: ${total[0]?.count || 0}\n• Active: ${active[0]?.count || 0}\n• Maintenance: ${maintenance[0]?.count || 0}`;
   }
   
+  // Routes today
+  if (lowerQuery.includes('route') && (lowerQuery.includes('today') || lowerQuery.includes('schedule'))) {
+    const result = await query(
+      'SELECT COUNT(*) as count FROM routes WHERE route_date = CURRENT_DATE'
+    );
+    const routes = await query(`
+      SELECT r.route_name, v.registration_num, s.staff_name as driver
+      FROM routes r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff s ON r.driver1_id = s.id
+      WHERE r.route_date = CURRENT_DATE
+      LIMIT 5
+    `);
+    const count = result[0]?.count || 0;
+    if (count === 0) return 'No routes scheduled for today.';
+    let response = `${count} route(s) scheduled today:`;
+    routes.forEach((r: any) => {
+      response += `\n• ${r.route_name} - ${r.registration_num || 'No vehicle'} (${r.driver || 'No driver'})`;
+    });
+    return response;
+  }
+  
+  // Inspections/Audits
+  if (lowerQuery.includes('inspection') || lowerQuery.includes('audit')) {
+    const pending = await query(
+      "SELECT COUNT(*) as count FROM audit_sessions WHERE status = 'Pending'"
+    );
+    const completed = await query(
+      "SELECT COUNT(*) as count FROM audit_sessions WHERE status = 'Completed' AND DATE(updated_at) = CURRENT_DATE"
+    );
+    return `Inspection Status:\n• Pending: ${pending[0]?.count || 0}\n• Completed today: ${completed[0]?.count || 0}`;
+  }
+  
+  // Repairs
+  if (lowerQuery.includes('repair') || lowerQuery.includes('breakdown')) {
+    const pending = await query("SELECT COUNT(*) as count FROM repairs WHERE status = 'Pending'");
+    const inProgress = await query("SELECT COUNT(*) as count FROM repairs WHERE status = 'In Progress'");
+    const recent = await query(`
+      SELECT r.description, v.registration_num, r.cost
+      FROM repairs r
+      JOIN vehicles v ON r.vehicle_id = v.id
+      WHERE r.date_in > CURRENT_DATE - INTERVAL '7 days'
+      ORDER BY r.date_in DESC
+      LIMIT 3
+    `);
+    let response = `Repair Status:\n• Pending: ${pending[0]?.count || 0}\n• In Progress: ${inProgress[0]?.count || 0}`;
+    if (recent.length > 0) {
+      response += '\n\nRecent repairs (7 days):';
+      recent.forEach((r: any) => {
+        response += `\n• ${r.registration_num}: ${r.description?.substring(0, 30)}... ($${r.cost})`;
+      });
+    }
+    return response;
+  }
+  
+  // Fuel
   if (lowerQuery.includes('fuel')) {
-    return 'Fuel data is available in the Fuel module and Analytics dashboard. You can view consumption by vehicle and driver.';
+    const today = await query('SELECT COALESCE(SUM(amount), 0) as total FROM fuel_records WHERE fuel_date = CURRENT_DATE');
+    const month = await query("SELECT COALESCE(SUM(amount), 0) as total FROM fuel_records WHERE fuel_date > CURRENT_DATE - INTERVAL '30 days'");
+    const avgEfficiency = await query("SELECT AVG(km_per_liter) as avg FROM fuel_records WHERE fuel_date > CURRENT_DATE - INTERVAL '30 days' AND km_per_liter IS NOT NULL");
+    return `Fuel Summary (30 days):\n• Total cost: $${parseFloat(month[0]?.total || 0).toFixed(2)}\n• Today: $${parseFloat(today[0]?.total || 0).toFixed(2)}\n• Avg efficiency: ${parseFloat(avgEfficiency[0]?.avg || 0).toFixed(2)} km/L`;
   }
   
+  // Drivers
   if (lowerQuery.includes('driver')) {
-    const result = await query("SELECT COUNT(*) as count FROM staff WHERE role = 'Driver'");
-    return `You have ${result[0]?.count || 0} drivers. View driver performance in the Analytics section.`;
+    const total = await query("SELECT COUNT(*) as count FROM staff WHERE role = 'Driver' AND deleted_at IS NULL");
+    const active = await query(`
+      SELECT COUNT(DISTINCT driver1_id) as count 
+      FROM routes 
+      WHERE route_date = CURRENT_DATE AND driver1_id IS NOT NULL
+    `);
+    return `Driver Status:\n• Total drivers: ${total[0]?.count || 0}\n• On duty today: ${active[0]?.count || 0}`;
   }
   
-  if (lowerQuery.includes('help')) {
-    return 'I can help with: vehicle counts, pending repairs, fuel info, driver stats, and general fleet questions. What would you like to know?';
+  // Analytics/Reports
+  if (lowerQuery.includes('report') || lowerQuery.includes('analytics')) {
+    return 'Reports available:\n• Fleet Summary\n• Fuel Consumption\n• Route History\n• Maintenance Records\n\nAccess these from the Reports menu.';
   }
   
-  return 'I understand you\'re asking about your fleet. For detailed information, please check the relevant dashboard or rephrase your question.';
+  // Training
+  if (lowerQuery.includes('training') || lowerQuery.includes('course')) {
+    const courses = await query('SELECT COUNT(*) as count FROM training_courses');
+    const enrollments = await query("SELECT COUNT(*) as count FROM training_enrollments WHERE status = 'in_progress'");
+    return `Training Overview:\n• Available courses: ${courses[0]?.count || 0}\n• Active enrollments: ${enrollments[0]?.count || 0}\n\nAccess the Training module to view courses and enroll.`;
+  }
+  
+  // Help
+  if (lowerQuery.includes('help') || lowerQuery.includes('what can you do')) {
+    return 'I can help you with:\n• Vehicle counts and status\n• Routes scheduled today\n• Pending repairs and maintenance\n• Fuel consumption summary\n• Driver statistics\n• Inspection/Audit status\n• Training information\n\nWhat would you like to know?';
+  }
+  
+  // Default - try to give a helpful response
+  return 'I can help with fleet information like vehicle status, routes, repairs, fuel, and more. Try asking:\n• "Which vehicles are under maintenance?"\n• "What routes are scheduled today?"\n• "How many pending repairs?"\n• "Show fuel summary"';
 };
 
 // ==================== EXPORT ====================

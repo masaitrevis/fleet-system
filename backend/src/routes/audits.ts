@@ -18,7 +18,16 @@ const generateAuditNumber = async () => {
 // Get all audit templates
 router.get('/templates', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM audit_templates WHERE is_active = true');
+    const result = await query(`
+      SELECT 
+        t.*,
+        COUNT(q.id) as question_count
+      FROM audit_templates t
+      LEFT JOIN audit_questions q ON q.template_id = t.id
+      WHERE t.is_active = true
+      GROUP BY t.id
+      ORDER BY t.template_name
+    `);
     res.json(result);
   } catch (error: any) {
     console.error('Get templates error:', error);

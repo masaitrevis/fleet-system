@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import ErrorBoundary from './ErrorBoundary';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface ReportsProps {
   apiUrl: string;
@@ -326,7 +326,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
       doc.text(`Period: ${dateRange === 'all' ? 'All Time' : `Last ${dateRange} days`}`, 14, 32);
       
       // Use autoTable
-      (doc as any).autoTable({
+      autoTable(doc, {
         head: [headers],
         body: data,
         startY: 40,
@@ -336,7 +336,7 @@ export default function Reports({ apiUrl }: ReportsProps) {
         margin: { top: 40 }
       });
 
-      doc.save(`${reportType}-report.pdf`);
+      doc.save(`${reportType}-report-${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (err: any) {
       console.error('PDF Export Error:', err);
       alert('Failed to generate PDF: ' + (err.message || 'Unknown error'));

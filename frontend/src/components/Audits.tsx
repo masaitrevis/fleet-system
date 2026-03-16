@@ -25,6 +25,7 @@ interface AuditTemplate {
   id: string;
   template_name: string;
   questions: AuditQuestion[];
+  question_count?: number;
 }
 
 interface AuditQuestion {
@@ -204,7 +205,7 @@ export default function Audits({ apiUrl, user }: AuditsProps) {
             >
               <option value="">Select Template</option>
               {templates?.map(t => (
-                <option key={t.id} value={t.id}>{t.template_name} ({t.questions?.length || 0} questions)</option>
+                <option key={t.id} value={t.id}>{t.template_name} ({t.question_count || 0} questions)</option>
               ))}
             </select>
           </div>
