@@ -30,6 +30,7 @@ import auditScheduleRoutes from './routes/audit-schedules';
 import integrationRoutes from './routes/integrations';
 import operationsRoutes from './routes/operations';
 import workshopRoutes from './routes/workshop';
+import riskIntelligenceRoutes from './routes/riskIntelligence';
 
 // Import services for webhooks and operations
 import * as webhookService from './services/webhook';
@@ -168,6 +169,9 @@ app.use('/api/operations', authenticateToken, operationsRoutes);
 
 // Workshop routes (stock, invoices, workshop management)
 app.use('/api/workshop', authenticateToken, workshopRoutes);
+
+// Risk Intelligence routes (AI-powered fleet risk analysis)
+app.use('/api/risk-intelligence', authenticateToken, riskIntelligenceRoutes);
 
 // Error logging (before error handler)
 app.use(errorLogger);

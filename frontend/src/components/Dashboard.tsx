@@ -3,6 +3,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
+import FleetIntelligenceWidget from './FleetIntelligenceWidget';
+import RiskAlertsPanel from './RiskAlertsPanel';
 
 interface DashboardProps {
   apiUrl: string;
@@ -334,6 +336,16 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
             {loading ? 'Refreshing...' : '🔄 Refresh'}
           </button>
         </div>
+      </div>
+
+      {/* Fleet Intelligence Widget */}
+      <div className="mb-8">
+        <FleetIntelligenceWidget apiUrl={apiUrl} />
+      </div>
+
+      {/* Risk Alerts Panel */}
+      <div className="mb-8">
+        <RiskAlertsPanel apiUrl={apiUrl} limit={5} />
       </div>
 
       {/* Stats Grid */}

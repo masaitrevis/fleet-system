@@ -89,6 +89,38 @@ const createTables = async () => {
     )
   `);
 
+  // Vehicle risk profiles
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vehicle_risk_profiles (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      vehicle_id UUID REFERENCES vehicles(id) ON DELETE CASCADE,
+      risk_level VARCHAR(20) DEFAULT 'low',
+      risk_score INTEGER DEFAULT 0,
+      factors JSONB DEFAULT '[]',
+      recommendations JSONB DEFAULT '[]',
+      calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Risk alerts
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS risk_alerts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      alert_type VARCHAR(50) NOT NULL,
+      severity VARCHAR(20) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      entity_id UUID,
+      entity_type VARCHAR(50),
+      entity_name VARCHAR(255),
+      acknowledged BOOLEAN DEFAULT FALSE,
+      acknowledged_by UUID REFERENCES users(id),
+      acknowledged_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Vehicles table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vehicles (
