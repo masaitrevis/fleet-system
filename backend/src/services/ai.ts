@@ -893,6 +893,425 @@ const processRuleBasedChat = async (queryText: string): Promise<string> => {
   return 'I can help with fleet information like vehicle status, routes, repairs, fuel, and more. Try asking:\n• "Which vehicles are under maintenance?"\n• "What routes are scheduled today?"\n• "How many pending repairs?"\n• "Show fuel summary"';
 };
 
+// ==================== FLEET COPILOT AI ====================
+
+interface FleetContext {
+  vehicles?: any[];
+  drivers?: any[];
+  routes?: any[];
+  inspections?: any[];
+  maintenance?: any[];
+  accidents?: any[];
+  training?: any[];
+  analytics?: any;
+}
+
+const SYSTEM_PROMPT = `You are the AI assistant for NextBotics Fleet Management System. Your role is to help users understand and manage fleet operations.
+
+CRITICAL INSTRUCTIONS:
+- NEVER introduce yourself. NEVER say "I am an AI assistant" or similar.
+- ALWAYS answer operational questions directly using the provided data.
+- Use bullet points (•) for lists.
+- Use tables for multiple entries with columns.
+- Keep responses short and actionable.
+- If data shows issues, highlight them clearly.
+- If no data found, provide useful guidance or next steps.
+- Focus on operational insights, not generic statements.`;
+
+/**
+ * Fetch fleet data based on query context
+ */
+const fetchFleetContext = async (queryText: string): Promise<FleetContext> => {
+  const lowerQuery = queryText.toLowerCase();
+  const context: FleetContext = {};
+  
+  // Vehicles data
+  if (lowerQuery.includes('vehicle') || lowerQuery.includes('fleet') || lowerQuery.includes('car') || lowerQuery.includes('truck')) {
+    context.vehicles = await query(`
+      SELECT v.registration_num, v.status, v.current_mileage, v.next_service_due, 
+             v.department, v.branch, v.make_model
+      FROM vehicles v
+      WHERE v.deleted_at IS NULL
+      ORDER BY v.registration_num
+      LIMIT 50
+    `);
+  }
+  
+  // Drivers data
+  if (lowerQuery.includes('driver') || lowerQuery.includes('operator') || lowerQuery.includes('staff')) {
+    context.drivers = await query(`
+      SELECT s.id, s.staff_name, s.role, s.department, s.branch, s.status
+      FROM staff s
+      WHERE s.deleted_at IS NULL
+      ORDER BY s.staff_name
+      LIMIT 50
+    `);
+  }
+  
+  // Routes data
+  if (lowerQuery.includes('route') || lowerQuery.includes('trip') || lowerQuery.includes('delivery')) {
+    const dateFilter = lowerQuery.includes('today') ? 'CURRENT_DATE' : 
+                      lowerQuery.includes('week') ? 'CURRENT_DATE - INTERVAL \'7 days\'' :
+                      lowerQuery.includes('month') ? 'CURRENT_DATE - INTERVAL \'30 days\'' : 'CURRENT_DATE - INTERVAL \'7 days\'';
+    
+    context.routes = await query(`
+      SELECT r.route_name, r.route_date, r.actual_km, r.target_km,
+             v.registration_num, s.staff_name as driver_name
+      FROM routes r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff s ON r.driver1_id = s.id
+      WHERE r.route_date >= ${dateFilter}
+      ORDER BY r.route_date DESC
+      LIMIT 30
+    `);
+  }
+  
+  // Inspections/Audits data
+  if (lowerQuery.includes('inspection') || lowerQuery.includes('audit') || lowerQuery.includes('check')) {
+    context.inspections = await query(`
+      SELECT audit.audit_number, audit.status, audit.audit_date, 
+             v.registration_num, t.template_name
+      FROM audit_sessions audit
+      LEFT JOIN vehicles v ON audit.vehicle_id = v.id
+      LEFT JOIN audit_templates t ON audit.template_id = t.id
+      WHERE audit.created_at > CURRENT_DATE - INTERVAL '30 days'
+      ORDER BY audit.created_at DESC
+      LIMIT 30
+    `);
+  }
+  
+  // Maintenance/Job Cards data
+  if (lowerQuery.includes('maintenance') || lowerQuery.includes('repair') || lowerQuery.includes('service') || lowerQuery.includes('job card')) {
+    context.maintenance = await query(`
+      SELECT jc.id, jc.status, jc.priority, jc.defect_description, jc.created_at,
+             v.registration_num, s.staff_name as assigned_to
+      FROM job_cards jc
+      LEFT JOIN vehicles v ON jc.vehicle_id = v.id
+      LEFT JOIN staff s ON jc.assigned_to = s.id
+      WHERE jc.created_at > CURRENT_DATE - INTERVAL '30 days'
+      ORDER BY jc.created_at DESC
+      LIMIT 30
+    `);
+  }
+  
+  // Accidents data
+  if (lowerQuery.includes('accident') || lowerQuery.includes('incident') || lowerQuery.includes('crash')) {
+    context.accidents = await query(`
+      SELECT a.id, a.accident_date, a.accident_cause, a.damage_severity,
+             v.registration_num, s.staff_name as driver_name
+      FROM accidents a
+      LEFT JOIN vehicles v ON a.vehicle_id = v.id
+      LEFT JOIN staff s ON a.driver_id = s.id
+      WHERE a.accident_date > CURRENT_DATE - INTERVAL '90 days'
+      ORDER BY a.accident_date DESC
+      LIMIT 20
+    `);
+  }
+  
+  // Training data
+  if (lowerQuery.includes('training') || lowerQuery.includes('course') || lowerQuery.includes('certification')) {
+    context.training = await query(`
+      SELECT tc.course_name, tc.category, tc.mandatory, 
+             COUNT(te.id) as enrolled_count
+      FROM training_courses tc
+      LEFT JOIN training_enrollments te ON te.course_id = tc.id AND te.status = 'in_progress'
+      GROUP BY tc.id, tc.course_name, tc.category, tc.mandatory
+      ORDER BY tc.mandatory DESC, tc.course_name
+      LIMIT 30
+    `);
+  }
+  
+  // Analytics summary
+  if (lowerQuery.includes('analytics') || lowerQuery.includes('report') || lowerQuery.includes('statistics') || lowerQuery.includes('summary')) {
+    const [vehicleStats, driverStats, fuelStats, repairStats] = await Promise.all([
+      query(`
+        SELECT 
+          COUNT(*) as total,
+          COUNT(CASE WHEN status = 'Active' THEN 1 END) as active,
+          COUNT(CASE WHEN status = 'Maintenance' THEN 1 END) as maintenance
+        FROM vehicles WHERE deleted_at IS NULL
+      `),
+      query(`
+        SELECT COUNT(*) as total FROM staff WHERE deleted_at IS NULL
+      `),
+      query(`
+        SELECT COALESCE(SUM(amount), 0) as total_cost, 
+               COALESCE(SUM(quantity_liters), 0) as total_liters
+        FROM fuel_records WHERE fuel_date > CURRENT_DATE - INTERVAL '30 days'
+      `),
+      query(`
+        SELECT COUNT(*) as pending FROM repairs WHERE status != 'Completed'
+      `)
+    ]);
+    
+    context.analytics = {
+      vehicles: vehicleStats[0],
+      drivers: driverStats[0],
+      fuel: fuelStats[0],
+      repairs: repairStats[0]
+    };
+  }
+  
+  return context;
+};
+
+/**
+ * Process fleet copilot query with comprehensive context
+ */
+export const processFleetCopilotQuery = async (userQuestion: string): Promise<string> => {
+  console.log('🤖 Fleet Copilot query:', userQuestion);
+  
+  try {
+    // Fetch relevant fleet context based on the question
+    const fleetContext = await fetchFleetContext(userQuestion);
+    
+    // Build context string for AI
+    let contextString = '';
+    
+    if (fleetContext.vehicles?.length) {
+      contextString += `\n\nVEHICLES (${fleetContext.vehicles.length} total):\n`;
+      fleetContext.vehicles.slice(0, 15).forEach((v: any) => {
+        contextString += `• ${v.registration_num} | ${v.status} | ${v.make_model || 'N/A'} | ${v.current_mileage?.toLocaleString() || 0} km${v.next_service_due ? ' | Service: ' + v.next_service_due : ''}\n`;
+      });
+      if (fleetContext.vehicles.length > 15) contextString += `... and ${fleetContext.vehicles.length - 15} more\n`;
+    }
+    
+    if (fleetContext.drivers?.length) {
+      contextString += `\n\nDRIVERS (${fleetContext.drivers.length} total):\n`;
+      fleetContext.drivers.slice(0, 10).forEach((d: any) => {
+        contextString += `• ${d.staff_name} | ${d.role} | ${d.department || 'N/A'}\n`;
+      });
+    }
+    
+    if (fleetContext.routes?.length) {
+      contextString += `\n\nROUTES (${fleetContext.routes.length} recent):\n`;
+      fleetContext.routes.slice(0, 10).forEach((r: any) => {
+        const status = r.actual_km ? `Completed (${r.actual_km} km)` : 'Scheduled';
+        contextString += `• ${r.route_name} | ${r.route_date} | ${status} | ${r.registration_num || 'No vehicle'}\n`;
+      });
+    }
+    
+    if (fleetContext.inspections?.length) {
+      contextString += `\n\nINSPECTIONS/AUDITS (${fleetContext.inspections.length} recent):\n`;
+      fleetContext.inspections.slice(0, 10).forEach((i: any) => {
+        contextString += `• ${i.audit_number} | ${i.status} | ${i.registration_num || 'N/A'} | ${i.template_name}\n`;
+      });
+    }
+    
+    if (fleetContext.maintenance?.length) {
+      contextString += `\n\nMAINTENANCE/JOB CARDS (${fleetContext.maintenance.length} recent):\n`;
+      fleetContext.maintenance.slice(0, 10).forEach((m: any) => {
+        contextString += `• ${m.registration_num || 'N/A'} | ${m.status} | ${m.priority} | ${m.defect_description?.substring(0, 40) || 'N/A'}...\n`;
+      });
+    }
+    
+    if (fleetContext.accidents?.length) {
+      contextString += `\n\nACCIDENTS (${fleetContext.accidents.length} recent):\n`;
+      fleetContext.accidents.slice(0, 10).forEach((a: any) => {
+        contextString += `• ${a.accident_date} | ${a.registration_num} | ${a.accident_cause} | ${a.damage_severity}\n`;
+      });
+    }
+    
+    if (fleetContext.training?.length) {
+      contextString += `\n\nTRAINING COURSES (${fleetContext.training.length}):\n`;
+      fleetContext.training.forEach((t: any) => {
+        contextString += `• ${t.course_name} | ${t.category} | ${t.mandatory ? 'Mandatory' : 'Optional'} | ${t.enrolled_count} enrolled\n`;
+      });
+    }
+    
+    if (fleetContext.analytics) {
+      contextString += `\n\nANALYTICS SUMMARY:\n`;
+      if (fleetContext.analytics.vehicles) {
+        contextString += `• Vehicles: ${fleetContext.analytics.vehicles.total} total (${fleetContext.analytics.vehicles.active} active, ${fleetContext.analytics.vehicles.maintenance} in maintenance)\n`;
+      }
+      if (fleetContext.analytics.drivers) {
+        contextString += `• Staff: ${fleetContext.analytics.drivers.total} total\n`;
+      }
+      if (fleetContext.analytics.fuel) {
+        contextString += `• Fuel (30 days): $${parseFloat(fleetContext.analytics.fuel.total_cost).toFixed(2)} | ${parseFloat(fleetContext.analytics.fuel.total_liters).toFixed(0)} liters\n`;
+      }
+      if (fleetContext.analytics.repairs) {
+        contextString += `• Pending Repairs: ${fleetContext.analytics.repairs.pending}\n`;
+      }
+    }
+    
+    // If AI is enabled, use OpenAI with full context
+    if (AI_ENABLED) {
+      console.log('🤖 Calling OpenAI Fleet Copilot...');
+      
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { 
+            role: 'user', 
+            content: `User Question: ${userQuestion}\n\nFleet Data Context:${contextString || '\nNo specific fleet data available for this query.'}\n\nProvide a direct, actionable answer based on the data above. Use bullet points or a table if listing multiple items.`
+          }
+        ],
+        max_tokens: 800,
+        temperature: 0.3
+      });
+      
+      console.log('🤖 OpenAI response received');
+      return response.choices[0].message.content || 'Unable to process query. Please try again.';
+    }
+    
+    // Fallback to enhanced rule-based response
+    console.log('🤖 Using rule-based Fleet Copilot fallback');
+    return processRuleBasedCopilot(userQuestion, fleetContext);
+    
+  } catch (error: any) {
+    console.error('🤖 Fleet Copilot error:', error.message);
+    // Fall back to simple rule-based
+    return processRuleBasedChat(userQuestion);
+  }
+};
+
+/**
+ * Enhanced rule-based copilot with full context
+ */
+const processRuleBasedCopilot = async (queryText: string, context: FleetContext): Promise<string> => {
+  const lowerQuery = queryText.toLowerCase();
+  
+  // Vehicles under maintenance
+  if ((lowerQuery.includes('maintenance') || lowerQuery.includes('under repair')) && lowerQuery.includes('vehicle')) {
+    const maintenanceVehicles = context.vehicles?.filter((v: any) => v.status === 'Maintenance') || [];
+    if (maintenanceVehicles.length === 0) {
+      return '✅ No vehicles currently under maintenance.';
+    }
+    let response = `🔧 ${maintenanceVehicles.length} vehicle(s) under maintenance:\n`;
+    maintenanceVehicles.forEach((v: any) => {
+      response += `• **${v.registration_num}** - ${v.make_model || 'N/A'} (${v.current_mileage?.toLocaleString() || 0} km)\n`;
+    });
+    return response;
+  }
+  
+  // Overdue inspections/audits
+  if (lowerQuery.includes('overdue') && (lowerQuery.includes('inspection') || lowerQuery.includes('audit'))) {
+    const overdue = context.inspections?.filter((i: any) => i.status === 'Pending' || i.status === 'Overdue') || [];
+    if (overdue.length === 0) {
+      return '✅ No overdue inspections. All audits are up to date.';
+    }
+    let response = `⚠️ ${overdue.length} overdue inspection(s):\n`;
+    overdue.forEach((i: any) => {
+      response += `• **${i.audit_number}** - ${i.registration_num || 'No vehicle'} - ${i.template_name}\n`;
+    });
+    response += '\n**Action:** Schedule these inspections immediately.';
+    return response;
+  }
+  
+  // Route delays
+  if (lowerQuery.includes('delay') || lowerQuery.includes('late') || lowerQuery.includes('missed')) {
+    const completedRoutes = context.routes?.filter((r: any) => r.actual_km && r.target_km) || [];
+    const delayed = completedRoutes.filter((r: any) => r.actual_km < r.target_km * 0.8);
+    
+    if (delayed.length === 0) {
+      return '✅ No route delays detected. All recent routes completed as planned.';
+    }
+    
+    let response = `⚠️ ${delayed.length} route(s) with potential delays:\n`;
+    delayed.forEach((r: any) => {
+      const completion = ((r.actual_km / r.target_km) * 100).toFixed(0);
+      response += `• **${r.route_name}** (${r.route_date}) - ${completion}% completion | ${r.registration_num}\n`;
+    });
+    return response;
+  }
+  
+  // Drivers with most trips
+  if (lowerQuery.includes('driver') && (lowerQuery.includes('most') || lowerQuery.includes('trip') || lowerQuery.includes('completed'))) {
+    const driverTrips: Record<string, { name: string; count: number; km: number }> = {};
+    
+    context.routes?.forEach((r: any) => {
+      if (r.driver_name) {
+        if (!driverTrips[r.driver_name]) {
+          driverTrips[r.driver_name] = { name: r.driver_name, count: 0, km: 0 };
+        }
+        driverTrips[r.driver_name].count++;
+        driverTrips[r.driver_name].km += parseFloat(r.actual_km || 0);
+      }
+    });
+    
+    const sorted = Object.values(driverTrips).sort((a, b) => b.count - a.count).slice(0, 5);
+    
+    if (sorted.length === 0) {
+      return 'No route data available for driver analysis.';
+    }
+    
+    let response = `🏆 Top Drivers by Trips:\n`;
+    sorted.forEach((d, i) => {
+      response += `${i + 1}. **${d.name}** - ${d.count} trips | ${d.km.toFixed(0)} km\n`;
+    });
+    return response;
+  }
+  
+  // Pending maintenance/repairs
+  if (lowerQuery.includes('pending') && (lowerQuery.includes('repair') || lowerQuery.includes('maintenance'))) {
+    const pending = context.maintenance?.filter((m: any) => m.status !== 'Completed' && m.status !== 'Closed') || [];
+    if (pending.length === 0) {
+      return '✅ No pending maintenance. All job cards are completed.';
+    }
+    let response = `🔧 ${pending.length} pending maintenance item(s):\n`;
+    pending.slice(0, 10).forEach((m: any) => {
+      response += `• **${m.registration_num || 'N/A'}** | ${m.status} | ${m.priority} | ${m.defect_description?.substring(0, 30)}...\n`;
+    });
+    if (pending.length > 10) response += `... and ${pending.length - 10} more\n`;
+    return response;
+  }
+  
+  // Vehicle count/status
+  if (lowerQuery.includes('how many') || lowerQuery.includes('count') || lowerQuery.includes('total')) {
+    const active = context.vehicles?.filter((v: any) => v.status === 'Active').length || 0;
+    const maintenance = context.vehicles?.filter((v: any) => v.status === 'Maintenance').length || 0;
+    const total = context.vehicles?.length || 0;
+    
+    return `📊 Fleet Status:\n• **Total:** ${total} vehicles\n• **Active:** ${active} vehicles\n• **Maintenance:** ${maintenance} vehicles`;
+  }
+  
+  // Today's routes
+  if (lowerQuery.includes('today') && lowerQuery.includes('route')) {
+    const todayRoutes = context.routes?.filter((r: any) => r.route_date === new Date().toISOString().split('T')[0]) || [];
+    if (todayRoutes.length === 0) {
+      return '📅 No routes scheduled for today.';
+    }
+    
+    let response = `📅 Today's Routes (${todayRoutes.length}):\n`;
+    todayRoutes.forEach((r: any) => {
+      const status = r.actual_km ? '✅ Completed' : '⏳ Scheduled';
+      response += `• **${r.route_name}** | ${status} | ${r.registration_num || 'No vehicle'} | ${r.driver_name || 'No driver'}\n`;
+    });
+    return response;
+  }
+  
+  // Recent accidents
+  if (lowerQuery.includes('accident') || lowerQuery.includes('incident')) {
+    if (!context.accidents || context.accidents.length === 0) {
+      return '✅ No accidents reported in the last 90 days.';
+    }
+    let response = `🚨 ${context.accidents.length} accident(s) in last 90 days:\n`;
+    context.accidents.slice(0, 5).forEach((a: any) => {
+      response += `• **${a.accident_date}** | ${a.registration_num} | ${a.accident_cause} | ${a.damage_severity}\n`;
+    });
+    return response;
+  }
+  
+  // Fuel summary
+  if (lowerQuery.includes('fuel')) {
+    if (!context.analytics?.fuel) {
+      return '⛽ Fuel data not available.';
+    }
+    const cost = parseFloat(context.analytics.fuel.total_cost || 0).toFixed(2);
+    const liters = parseFloat(context.analytics.fuel.total_liters || 0).toFixed(0);
+    return `⛽ Fuel Summary (30 days):\n• **Total Cost:** $${cost}\n• **Total Volume:** ${liters} liters`;
+  }
+  
+  // Default response with available context
+  if (context.analytics) {
+    return `📊 Fleet Overview:\n• Vehicles: ${context.analytics.vehicles?.total || 0} total\n• Staff: ${context.analytics.drivers?.total || 0} total\n• Pending Repairs: ${context.analytics.repairs?.pending || 0}\n\nAsk me about specific areas like vehicles, routes, maintenance, or accidents.`;
+  }
+  
+  return 'I can help with fleet operations. Try asking:\n• "Which vehicles are under maintenance?"\n• "Show overdue inspections"\n• "Which routes had delays today?"\n• "Which drivers completed the most trips?"';
+};
+
 // ==================== EXPORT ====================
 
 export const AI_ENABLED = !!process.env.OPENAI_API_KEY;
@@ -906,6 +1325,7 @@ export default {
   detectAnomalies,
   predictMaintenanceCosts,
   processChatQuery,
+  processFleetCopilotQuery,
   AI_ENABLED
 };
 

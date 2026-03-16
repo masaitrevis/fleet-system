@@ -42,27 +42,25 @@ export default function AIChatbot({ apiUrl }: AIChatbotProps) {
     }]);
 
     try {
-      console.log('🤖 Sending to AI:', `${apiUrl}/operations/chat`);
+      console.log('🤖 Sending to Fleet Copilot:', `${apiUrl}/operations/copilot`);
       
-      const response = await fetch(`${apiUrl}/operations/chat`, {
+      // Use new Fleet Copilot endpoint
+      const response = await fetch(`${apiUrl}/operations/copilot`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          messages: [
-            ...messages.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: userMessage }
-          ]
+          question: userMessage
         })
       });
 
-      console.log('🤖 AI response status:', response.status);
+      console.log('🤖 Fleet Copilot response status:', response.status);
 
       if (response.ok) {
         const data = await response.json();
-        console.log('🤖 AI response:', data);
+        console.log('🤖 Fleet Copilot response:', data);
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: data.response || 'I received your message but have no response.',
@@ -70,7 +68,7 @@ export default function AIChatbot({ apiUrl }: AIChatbotProps) {
         }]);
       } else {
         const errorText = await response.text();
-        console.error('🤖 AI error:', errorText);
+        console.error('🤖 Fleet Copilot error:', errorText);
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: `Error ${response.status}: ${errorText || 'Failed to get response'}`,
@@ -78,7 +76,7 @@ export default function AIChatbot({ apiUrl }: AIChatbotProps) {
         }]);
       }
     } catch (error: any) {
-      console.error('🤖 AI catch error:', error);
+      console.error('🤖 Fleet Copilot catch error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: `Network error: ${error.message || 'Failed to connect'}`,
@@ -90,10 +88,10 @@ export default function AIChatbot({ apiUrl }: AIChatbotProps) {
   };
 
   const quickQuestions = [
-    'How many vehicles do we have?',
-    'Any pending repairs?',
-    'Show fuel efficiency tips',
-    'Driver safety recommendations'
+    'Which vehicles are under maintenance?',
+    'Show overdue inspections',
+    'Which drivers completed the most trips?',
+    'Any pending repairs?'
   ];
 
   if (!isOpen) {
@@ -101,7 +99,7 @@ export default function AIChatbot({ apiUrl }: AIChatbotProps) {
       <button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all z-50 flex items-center justify-center"
-        title="AI Assistant"
+        title="Fleet Copilot"
       >
         <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -121,8 +119,8 @@ export default function AIChatbot({ apiUrl }: AIChatbotProps) {
             </svg>
           </div>
           <div>
-            <h3 className="font-semibold">FleetPro AI</h3>
-            <p className="text-xs text-blue-100">Ask me anything about your fleet</p>
+            <h3 className="font-semibold">Fleet Copilot</h3>
+            <p className="text-xs text-blue-100">Your fleet operations assistant</p>
           </div>
         </div>
         <button

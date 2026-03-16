@@ -400,4 +400,24 @@ router.post('/chat',
   })
 );
 
+// Fleet Copilot - Advanced AI Assistant
+router.post('/copilot',
+  authenticateToken,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { question } = req.body;
+    
+    if (!question || typeof question !== 'string') {
+      return res.status(400).json({ error: 'Question string required' });
+    }
+    
+    console.log('🤖 Fleet Copilot query from user:', (req as any).user?.email);
+    
+    const response = await aiService.processFleetCopilotQuery(question);
+    res.json({
+      aiEnabled: aiService.AI_ENABLED,
+      response
+    });
+  })
+);
+
 export default router;
