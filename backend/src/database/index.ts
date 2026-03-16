@@ -1325,6 +1325,8 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
   
   // ========== MIGRATIONS ==========
   // Add missing columns to existing tables
+  console.log('🔧 Running database migrations...');
+  
   try {
     // Add soft delete columns to vehicles
     await pool.query(`
@@ -1333,8 +1335,8 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
       ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id)
     `);
     console.log('✅ Vehicles soft-delete columns added');
-  } catch (err) {
-    console.log('Note: Vehicles soft-delete columns may already exist');
+  } catch (err: any) {
+    console.error('❌ Migration failed (soft-delete):', err.message);
   }
   
   try {
@@ -1345,8 +1347,8 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
       ADD COLUMN IF NOT EXISTS defect_reported_at TIMESTAMP
     `);
     console.log('✅ Vehicles defect columns added');
-  } catch (err) {
-    console.log('Note: Vehicles defect columns may already exist');
+  } catch (err: any) {
+    console.error('❌ Migration failed (defect):', err.message);
   }
   
   try {
@@ -1357,9 +1359,11 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
       ADD COLUMN IF NOT EXISTS next_service_due DATE
     `);
     console.log('✅ Vehicles service columns added');
-  } catch (err) {
-    console.log('Note: Vehicles service columns may already exist');
+  } catch (err: any) {
+    console.error('❌ Migration failed (service):', err.message);
   }
+  
+  console.log('🔧 Migrations complete');
 };
 
 export const query = async (sql: string, params?: any[]): Promise<any> => {
