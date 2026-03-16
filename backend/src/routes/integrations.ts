@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { authenticateToken, requireRole } from '../middleware/auth';
+import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth';
 import { authenticateApiKey, requireApiPermission } from '../middleware/apiAuth';
 import { rateLimiter, apiKeyRateLimiter } from '../middleware/rateLimiter';
 import { query } from '../database';
@@ -15,8 +15,8 @@ const router = Router();
 router.post('/api-keys', 
   authenticateToken, 
   requireRole(['admin']),
-  asyncHandler(async (req: Request, res: Response) => {
-    const { name, description, permissions, expiresInDays, rateLimitPerMinute } = req.body;
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { name, description, permissions, expiresInDays, rateLimitPerMinute } = req.body as any;
     
     if (!name) {
       throw Errors.BadRequest('Name is required');
@@ -31,7 +31,7 @@ router.post('/api-keys',
       keyPrefix: '',
       name,
       description,
-      createdBy: req.user.userId,
+      createdBy: req.user?.userId,
       expiresAt,
       permissions: permissions || ['read'],
       rateLimitPerMinute: rateLimitPerMinute || 60
@@ -86,8 +86,8 @@ router.get('/api-keys/:id/usage',
 router.post('/webhooks',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req: Request, res: Response) => {
-    const { name, url, events, headers } = req.body;
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { name, url, events, headers } = req.body as any;
     
     if (!name || !url || !events || !Array.isArray(events)) {
       throw Errors.BadRequest('Name, URL, and events array are required');
@@ -104,7 +104,7 @@ router.post('/webhooks',
       name,
       url,
       events,
-      createdBy: req.user.userId,
+      createdBy: req.user?.userId || '',
       headers
     });
     
@@ -233,8 +233,8 @@ router.post('/public/routes',
   apiKeyRateLimiter(50),
   authenticateApiKey,
   requireApiPermission('write'),
-  asyncHandler(async (req: any, res) => {
-    const { route_date, route_name, vehicle_id, actual_km, actual_fuel } = req.body;
+  asyncHandler(async (req: Request, res: Response) => {
+    const { route_date, route_name, vehicle_id, actual_km, actual_fuel } = req.body as any;
     
     if (!route_date || !vehicle_id || !actual_km) {
       throw Errors.BadRequest('route_date, vehicle_id, and actual_km are required');
@@ -255,8 +255,8 @@ router.post('/public/fuel',
   apiKeyRateLimiter(50),
   authenticateApiKey,
   requireApiPermission('write'),
-  asyncHandler(async (req: any, res) => {
-    const { fuel_date, vehicle_id, quantity_liters, amount, current_mileage } = req.body;
+  asyncHandler(async (req: Request, res: Response) => {
+    const { fuel_date, vehicle_id, quantity_liters, amount, current_mileage } = req.body as any;
     
     if (!fuel_date || !vehicle_id || !quantity_liters) {
       throw Errors.BadRequest('fuel_date, vehicle_id, and quantity_liters are required');
@@ -294,8 +294,8 @@ router.post('/public/accidents',
   apiKeyRateLimiter(20),
   authenticateApiKey,
   requireApiPermission('write'),
-  asyncHandler(async (req: any, res) => {
-    const { accident_date, vehicle_id, driver_id, location, description } = req.body;
+  asyncHandler(async (req: Request, res: Response) => {
+    const { accident_date, vehicle_id, driver_id, location, description } = req.body as any;
     
     if (!accident_date || !vehicle_id || !description) {
       throw Errors.BadRequest('accident_date, vehicle_id, and description are required');

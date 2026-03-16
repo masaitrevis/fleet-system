@@ -1,7 +1,7 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { query } from '../database';
 import { v4 as uuidv4 } from 'uuid';
-import { authenticateToken, requireRole } from '../middleware/auth';
+import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
@@ -52,7 +52,7 @@ router.get('/parts/:id',
       LEFT JOIN stock_usage su ON su.part_id = sp.id
       WHERE sp.id = $1 AND sp.deleted_at IS NULL
       GROUP BY sp.id
-    `, [req.params.id]);
+    `, [(req as any).params.id]);
     
     if (part.length === 0) {
       return res.status(404).json({ error: 'Part not found' });
@@ -68,7 +68,7 @@ router.get('/parts/:id',
       WHERE su.part_id = $1
       ORDER BY su.created_at DESC
       LIMIT 20
-    `, [req.params.id]);
+    `, [(req as any).params.id]);
     
     res.json({ ...part[0], usage_history: usage });
   })
@@ -83,7 +83,7 @@ router.post('/parts',
       part_number, part_name, description, category,
       manufacturer, supplier, unit_cost, quantity_on_hand,
       reorder_level, location_bin, compatible_vehicles
-    } = req.body;
+    } = req.body as any;
     
     if (!part_number || !part_name) {
       return res.status(400).json({ error: 'Part number and name are required' });
@@ -113,7 +113,7 @@ router.put('/parts/:id',
   authenticateToken,
   requireRole(['admin', 'manager']),
   asyncHandler(async (req: Request, res: Response) => {
-    const updates = req.body;
+    const updates = req.body as any;
     const allowedFields = [
       'part_name', 'description', 'category', 'manufacturer', 'supplier',
       'unit_cost', 'quantity_on_hand', 'reorder_level', 'location_bin', 'compatible_vehicles'
@@ -143,7 +143,7 @@ router.put('/parts/:id',
       WHERE id = $${paramIndex} AND deleted_at IS NULL
     `, values);
     
-    const result = await query('SELECT * FROM stock_parts WHERE id = $1', [req.params.id]);
+    const result = await query('SELECT * FROM stock_parts WHERE id = $1', [(req as any).params.id]);
     res.json(result[0]);
   })
 );
@@ -153,7 +153,7 @@ router.post('/parts/:id/adjust',
   authenticateToken,
   requireRole(['admin', 'manager']),
   asyncHandler(async (req: Request, res: Response) => {
-    const { adjustment, reason } = req.body;
+    const { adjustment, reason } = req.body as any;
     
     if (!adjustment || isNaN(adjustment)) {
       return res.status(400).json({ error: 'Valid adjustment amount required' });
@@ -172,7 +172,7 @@ router.post('/parts/:id/adjust',
       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
     `, [uuidv4(), req.params.id, adjustment, reason, (req as any).user?.userId]);
     
-    const result = await query('SELECT * FROM stock_parts WHERE id = $1', [req.params.id]);
+    const result = await query('SELECT * FROM stock_parts WHERE id = $1', [(req as any).params.id]);
     res.json(result[0]);
   })
 );
@@ -182,7 +182,7 @@ router.post('/usage',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor']),
   asyncHandler(async (req: Request, res: Response) => {
-    const { part_id, quantity_used, unit_cost, repair_id, job_card_id, notes } = req.body;
+    const { part_id, quantity_used, unit_cost, repair_id, job_card_id, notes } = req.body as any;
     
     if (!part_id || !quantity_used) {
       return res.status(400).json({ error: 'Part ID and quantity are required' });
@@ -324,7 +324,7 @@ router.get('/invoices/:id',
       FROM invoices i
       LEFT JOIN customers c ON c.id = i.customer_id
       WHERE i.id = $1 AND i.deleted_at IS NULL
-    `, [req.params.id]);
+    `, [(req as any).params.id]);
     
     if (invoice.length === 0) {
       return res.status(404).json({ error: 'Invoice not found' });
@@ -335,11 +335,11 @@ router.get('/invoices/:id',
       FROM invoice_items ii
       LEFT JOIN stock_parts sp ON sp.id = ii.part_id
       WHERE ii.invoice_id = $1
-    `, [req.params.id]);
+    `, [(req as any).params.id]);
     
     const payments = await query(`
       SELECT * FROM invoice_payments WHERE invoice_id = $1 ORDER BY payment_date DESC
-    `, [req.params.id]);
+    `, [(req as any).params.id]);
     
     res.json({ ...invoice[0], items, payments });
   })
@@ -350,7 +350,7 @@ router.post('/invoices/from-job-card',
   authenticateToken,
   requireRole(['admin', 'manager']),
   asyncHandler(async (req: Request, res: Response) => {
-    const { job_card_id, customer_id, labor_hours, labor_rate } = req.body;
+    const { job_card_id, customer_id, labor_hours, labor_rate } = req.body as any;
     
     if (!job_card_id) {
       return res.status(400).json({ error: 'Job card ID is required' });
@@ -450,7 +450,7 @@ router.patch('/invoices/:id/status',
   authenticateToken,
   requireRole(['admin', 'manager']),
   asyncHandler(async (req: Request, res: Response) => {
-    const { status } = req.body;
+    const { status } = req.body as any;
     const validStatuses = ['Draft', 'Sent', 'Paid', 'Overdue', 'Cancelled'];
     
     if (!validStatuses.includes(status)) {
@@ -471,14 +471,14 @@ router.patch('/invoices/:id/status',
 router.post('/invoices/:id/payments',
   authenticateToken,
   requireRole(['admin', 'manager']),
-  asyncHandler(async (req: Request, res: Response) => {
-    const { amount, payment_method, reference, notes } = req.body;
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { amount, payment_method, reference, notes } = req.body as any;
     
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Valid payment amount required' });
     }
     
-    const invoice = await query('SELECT total, amount_paid FROM invoices WHERE id = $1', [req.params.id]);
+    const invoice = await query('SELECT total, amount_paid FROM invoices WHERE id = $1', [(req as any).params.id]);
     if (invoice.length === 0) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
@@ -493,8 +493,8 @@ router.post('/invoices/:id/payments',
       INSERT INTO invoice_payments (id, invoice_id, amount, payment_method, reference, notes, received_by)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [
-      paymentId, req.params.id, amount, payment_method || 'Cash',
-      reference, notes, (req as any).user?.userId
+      paymentId, (req as any).params.id, amount, payment_method || 'Cash',
+      reference, notes, req.user?.userId
     ]);
     
     // Update invoice payment status
@@ -505,7 +505,7 @@ router.post('/invoices/:id/payments',
       UPDATE invoices 
       SET amount_paid = $1, status = $2, updated_at = CURRENT_TIMESTAMP
       WHERE id = $3
-    `, [newPaid, newStatus, req.params.id]);
+    `, [newPaid, newStatus, (req as any).params.id]);
     
     const result = await query('SELECT * FROM invoice_payments WHERE id = $1', [paymentId]);
     res.status(201).json(result[0]);
@@ -517,7 +517,7 @@ router.get('/financial-summary',
   authenticateToken,
   requireRole(['admin', 'manager']),
   asyncHandler(async (req: Request, res: Response) => {
-    const { period } = req.query; // 'month', 'quarter', 'year'
+    const { period } = req.query as { period?: string }; // 'month', 'quarter', 'year'
     
     let dateFilter = '';
     if (period === 'month') {

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { authenticateToken, requireRole } from '../middleware/auth';
 import { asyncHandler, Errors } from '../middleware/errorHandler';
 import { query } from '../database';
@@ -31,7 +31,7 @@ router.get('/fleet-health/:vehicleId',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor', 'hod']),
   asyncHandler(async (req: Request, res: Response) => {
-    const health = await operationsAI.analyzeVehicleHealth(req.params.vehicleId);
+    const health = await operationsAI.analyzeVehicleHealth((req as any).params.vehicleId);
     if (!health) {
       throw Errors.NotFound('Vehicle health data');
     }
@@ -44,7 +44,7 @@ router.post('/optimize-route',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor']),
   asyncHandler(async (req: Request, res: Response) => {
-    const { stops, startLocation, endLocation, constraints } = req.body;
+    const { stops, startLocation, endLocation, constraints } = req.body as any;
     
     if (!stops || !Array.isArray(stops) || stops.length === 0) {
       throw Errors.BadRequest('Stops array is required');
@@ -70,7 +70,7 @@ router.get('/alerts',
   authenticateToken,
   requireRole(['admin', 'manager', 'transport_supervisor', 'hod']),
   asyncHandler(async (req: Request, res: Response) => {
-    const { severity = 'all' } = req.query;
+    const { severity = 'all' } = req.query as { severity?: string };
     
     // Get fleet health to generate alerts
     const health = await operationsAI.getFleetHealthSummary();
