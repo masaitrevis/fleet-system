@@ -1322,6 +1322,20 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
       console.log('✅ DVIR questions seeded (13 questions)');
     }
   }
+  
+  // ========== MIGRATIONS ==========
+  // Add missing columns to existing tables
+  try {
+    // Check and add defect_notes to vehicles
+    await pool.query(`
+      ALTER TABLE vehicles 
+      ADD COLUMN IF NOT EXISTS defect_notes TEXT,
+      ADD COLUMN IF NOT EXISTS defect_reported_at TIMESTAMP
+    `);
+    console.log('✅ Vehicles columns verified (defect_notes, defect_reported_at)');
+  } catch (err) {
+    console.log('Note: Vehicles columns may already exist');
+  }
 };
 
 export const query = async (sql: string, params?: any[]): Promise<any> => {
