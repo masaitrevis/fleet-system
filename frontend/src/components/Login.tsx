@@ -17,15 +17,20 @@ export default function Login({ onLogin }: LoginProps) {
     setError('');
     setLoading(true);
 
-    const success = await login(email, password);
-    
-    if (success) {
-      onLogin();
-    } else {
-      setError('Invalid email or password');
+    try {
+      const success = await login(email, password);
+      
+      if (success) {
+        onLogin();
+      } else {
+        setError('Invalid email or password');
+      }
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(`Login failed: ${err.message || 'Network error'}`);
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return (
