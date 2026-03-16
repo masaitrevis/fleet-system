@@ -973,22 +973,22 @@ export const calculateVehicleRisk = async (vehicleId?: string): Promise<VehicleR
       v.defect_notes,
       v.defect_reported_at,
       v.status,
-      -- Defect count (30 days)
-      COUNT(DISTINCT CASE WHEN jd.defect_description IS NOT NULL AND jd.created_at > CURRENT_DATE - INTERVAL '30 days' THEN jd.id END) as defect_count_30d,
+      -- Defect count (30 days) from job_cards
+      COUNT(DISTINCT CASE WHEN jc.defect_description IS NOT NULL AND jc.created_at > CURRENT_DATE - INTERVAL '30 days' THEN jc.id END) as defect_count_30d,
       -- Accident count (90 days)
       COUNT(DISTINCT CASE WHEN a.id IS NOT NULL AND a.accident_date > CURRENT_DATE - INTERVAL '90 days' THEN a.id END) as accident_count_90d,
       -- Maintenance frequency (repairs in last 90 days)
       COUNT(DISTINCT CASE WHEN r.id IS NOT NULL AND r.date_in > CURRENT_DATE - INTERVAL '90 days' THEN r.id END) as repair_count_90d,
-      -- Overdue inspection check
-      MAX(ins.next_due_date) as next_inspection_due,
+      -- Overdue inspection check (using audit_sessions)
+      MAX(CASE WHEN audit.status = 'Completed' THEN audit.audit_date END) as last_audit_date,
       -- Route completion rate
       COUNT(DISTINCT CASE WHEN rt.route_date > CURRENT_DATE - INTERVAL '30 days' THEN rt.id END) as routes_30d,
       COUNT(DISTINCT CASE WHEN rt.route_date > CURRENT_DATE - INTERVAL '30 days' AND rt.actual_km IS NOT NULL THEN rt.id END) as completed_routes_30d
     FROM vehicles v
-    LEFT JOIN job_defects jd ON jd.vehicle_id = v.id
+    LEFT JOIN job_cards jc ON jc.vehicle_id = v.id
     LEFT JOIN accidents a ON a.vehicle_id = v.id
     LEFT JOIN repairs r ON r.vehicle_id = v.id
-    LEFT JOIN inspections ins ON ins.vehicle_id = v.id AND ins.status = 'Active'
+    LEFT JOIN audit_sessions audit ON audit.vehicle_id = v.id
     LEFT JOIN routes rt ON rt.vehicle_id = v.id
     ${whereClause}
     GROUP BY v.id, v.registration_num, v.current_mileage, v.next_service_due, v.last_service_date, v.defect_notes, v.defect_reported_at, v.status
@@ -1068,24 +1068,32 @@ export const calculateVehicleRisk = async (vehicleId?: string): Promise<VehicleR
       });
     }
     
-    // Inspection overdue (0-15 points)
-    if (v.next_inspection_due) {
-      const daysUntilInspection = Math.ceil((new Date(v.next_inspection_due).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      if (daysUntilInspection < 0) {
+    // Inspection check (0-15 points) - based on last audit date (assuming quarterly audits)
+    if (v.last_audit_date) {
+      const daysSinceAudit = Math.ceil((Date.now() - new Date(v.last_audit_date).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSinceAudit > 90) {
         riskScore += 15;
         factors.push({
           type: 'inspection',
           severity: 'high',
-          description: `Inspection overdue by ${Math.abs(daysUntilInspection)} days`
+          description: `Last audit was ${daysSinceAudit} days ago (overdue)`
         });
-      } else if (daysUntilInspection <= 7) {
+      } else if (daysSinceAudit > 75) {
         riskScore += 5;
         factors.push({
           type: 'inspection',
           severity: 'low',
-          description: `Inspection due in ${daysUntilInspection} days`
+          description: `Last audit was ${daysSinceAudit} days ago (due soon)`
         });
       }
+    } else {
+      // No audit record found
+      riskScore += 10;
+      factors.push({
+        type: 'inspection',
+        severity: 'medium',
+        description: 'No audit record found for this vehicle'
+      });
     }
     
     // Usage pattern analysis (0-10 points)
@@ -1159,14 +1167,14 @@ export const generateRiskAlerts = async (): Promise<RiskAlert[]> => {
     SELECT 
       v.id,
       v.registration_num,
-      COUNT(jd.id) as defect_count,
-      STRING_AGG(DISTINCT jd.defect_description, '; ') as defect_types
+      COUNT(jc.id) as defect_count,
+      STRING_AGG(DISTINCT jc.defect_description, '; ') as defect_types
     FROM vehicles v
-    JOIN job_defects jd ON jd.vehicle_id = v.id
-    WHERE jd.created_at > CURRENT_DATE - INTERVAL '30 days'
+    JOIN job_cards jc ON jc.vehicle_id = v.id
+    WHERE jc.created_at > CURRENT_DATE - INTERVAL '30 days'
     AND v.deleted_at IS NULL
     GROUP BY v.id, v.registration_num
-    HAVING COUNT(jd.id) >= 3
+    HAVING COUNT(jc.id) >= 3
   `);
   
   for (const v of repeatedDefects) {
@@ -1212,28 +1220,32 @@ export const generateRiskAlerts = async (): Promise<RiskAlert[]> => {
     });
   }
   
-  // 3. Overdue inspections
-  const overdueInspections = await query(`
+  // 3. Overdue audits (no audit in last 90 days)
+  const overdueAudits = await query(`
     SELECT 
       v.id,
       v.registration_num,
-      MAX(i.next_due_date) as inspection_due
+      MAX(audit.audit_date) as last_audit_date
     FROM vehicles v
-    JOIN inspections i ON i.vehicle_id = v.id
-    WHERE i.next_due_date < CURRENT_DATE
-    AND i.status = 'Active'
-    AND v.deleted_at IS NULL
+    LEFT JOIN audit_sessions audit ON audit.vehicle_id = v.id AND audit.status = 'Completed'
+    WHERE v.deleted_at IS NULL
+    AND v.status = 'Active'
     GROUP BY v.id, v.registration_num
+    HAVING MAX(audit.audit_date) IS NULL OR MAX(audit.audit_date) < CURRENT_DATE - INTERVAL '90 days'
   `);
   
-  for (const v of overdueInspections) {
-    const daysOverdue = Math.ceil((Date.now() - new Date(v.inspection_due).getTime()) / (1000 * 60 * 60 * 24));
+  for (const v of overdueAudits) {
+    const daysOverdue = v.last_audit_date 
+      ? Math.ceil((Date.now() - new Date(v.last_audit_date).getTime()) / (1000 * 60 * 60 * 24)) - 90
+      : 999;
     alerts.push({
-      id: `inspection-${v.id}`,
+      id: `audit-${v.id}`,
       type: 'inspection',
-      severity: daysOverdue > 7 ? 'critical' : 'high',
-      title: 'Overdue Inspection',
-      description: `Vehicle ${v.registration_num} has not completed its scheduled inspection (${daysOverdue} days overdue).`,
+      severity: daysOverdue > 30 ? 'critical' : 'high',
+      title: 'Overdue Audit',
+      description: v.last_audit_date 
+        ? `Vehicle ${v.registration_num} has not had a completed audit in over 90 days (${daysOverdue} days overdue).`
+        : `Vehicle ${v.registration_num} has no audit record. Schedule initial audit.`,
       entityId: v.id,
       entityName: v.registration_num,
       createdAt: new Date().toISOString(),
@@ -1319,13 +1331,14 @@ export const getFleetIntelligenceSummary = async (): Promise<FleetIntelligenceSu
     critical: riskProfiles.filter(v => v.riskLevel === 'critical').length
   };
   
-  const overdueInspections = await query(`
+  const overdueAudits = await query(`
     SELECT COUNT(DISTINCT v.id) as count
     FROM vehicles v
-    JOIN inspections i ON i.vehicle_id = v.id
-    WHERE i.next_due_date < CURRENT_DATE
-    AND i.status = 'Active'
-    AND v.deleted_at IS NULL
+    LEFT JOIN audit_sessions audit ON audit.vehicle_id = v.id AND audit.status = 'Completed'
+    WHERE v.deleted_at IS NULL
+    AND v.status = 'Active'
+    GROUP BY v.id
+    HAVING MAX(audit.audit_date) IS NULL OR MAX(audit.audit_date) < CURRENT_DATE - INTERVAL '90 days'
   `);
   
   const maintenanceDueSoon = await query(`
@@ -1347,7 +1360,7 @@ export const getFleetIntelligenceSummary = async (): Promise<FleetIntelligenceSu
     criticalAlerts: alerts.filter(a => a.severity === 'critical').length,
     highAlerts: alerts.filter(a => a.severity === 'high').length,
     mediumAlerts: alerts.filter(a => a.severity === 'medium').length,
-    overdueInspections: parseInt(overdueInspections[0]?.count) || 0,
+    overdueInspections: parseInt(overdueAudits[0]?.count) || 0,
     maintenanceDueSoon: parseInt(maintenanceDueSoon[0]?.count) || 0,
     driverSafetyAlerts: parseInt(driverSafetyAlerts[0]?.count) || 0,
     vehiclesByRiskLevel
@@ -1377,15 +1390,14 @@ export const getPredictiveMaintenanceSuggestions = async (): Promise<Array<{
     SELECT 
       v.id,
       v.registration_num,
-      COUNT(jd.id) as defect_count_30d,
-      COUNT(CASE WHEN jd.created_at > CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as defect_count_7d,
-      AVG(v.current_mileage - v.last_service_mileage) as miles_since_service
+      COUNT(jc.id) as defect_count_30d,
+      COUNT(CASE WHEN jc.created_at > CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as defect_count_7d
     FROM vehicles v
-    LEFT JOIN job_defects jd ON jd.vehicle_id = v.id AND jd.created_at > CURRENT_DATE - INTERVAL '30 days'
+    LEFT JOIN job_cards jc ON jc.vehicle_id = v.id AND jc.created_at > CURRENT_DATE - INTERVAL '30 days'
     WHERE v.deleted_at IS NULL
     AND v.status = 'Active'
-    GROUP BY v.id, v.registration_num, v.current_mileage, v.last_service_mileage
-    HAVING COUNT(jd.id) >= 2
+    GROUP BY v.id, v.registration_num
+    HAVING COUNT(jc.id) >= 2
   `);
   
   for (const v of defectTrends) {
