@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { query } from '../database';
 import { v4 as uuidv4 } from 'uuid';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
+
+// Apply authentication to all audit routes
+router.use(authenticateToken);
 
 // Generate audit number
 const generateAuditNumber = async () => {

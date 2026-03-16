@@ -2,8 +2,12 @@ import { Router, Request, Response } from 'express';
 import { query } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 import * as aiService from '../services/ai';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
+
+// Apply authentication to all training routes
+router.use(authenticateToken);
 
 // PASSING SCORE
 const PASSING_SCORE = 70;
