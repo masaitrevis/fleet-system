@@ -1326,15 +1326,39 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
   // ========== MIGRATIONS ==========
   // Add missing columns to existing tables
   try {
+    // Add soft delete columns to vehicles
+    await pool.query(`
+      ALTER TABLE vehicles 
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id)
+    `);
+    console.log('✅ Vehicles soft-delete columns added');
+  } catch (err) {
+    console.log('Note: Vehicles soft-delete columns may already exist');
+  }
+  
+  try {
     // Check and add defect_notes to vehicles
     await pool.query(`
       ALTER TABLE vehicles 
       ADD COLUMN IF NOT EXISTS defect_notes TEXT,
       ADD COLUMN IF NOT EXISTS defect_reported_at TIMESTAMP
     `);
-    console.log('✅ Vehicles columns verified (defect_notes, defect_reported_at)');
+    console.log('✅ Vehicles defect columns added');
   } catch (err) {
-    console.log('Note: Vehicles columns may already exist');
+    console.log('Note: Vehicles defect columns may already exist');
+  }
+  
+  try {
+    // Add service columns if missing
+    await pool.query(`
+      ALTER TABLE vehicles 
+      ADD COLUMN IF NOT EXISTS last_service_date DATE,
+      ADD COLUMN IF NOT EXISTS next_service_due DATE
+    `);
+    console.log('✅ Vehicles service columns added');
+  } catch (err) {
+    console.log('Note: Vehicles service columns may already exist');
   }
 };
 
