@@ -1401,7 +1401,7 @@ export const calculateVehicleRisk = async (vehicleId?: string): Promise<VehicleR
       -- Maintenance frequency (repairs in last 90 days)
       COUNT(DISTINCT CASE WHEN r.id IS NOT NULL AND r.date_in > CURRENT_DATE - INTERVAL '90 days' THEN r.id END) as repair_count_90d,
       -- Overdue inspection check (using audit_sessions)
-      MAX(CASE WHEN audit.status = 'Completed' THEN audit.audit_date END) as last_audit_date,
+      audit.last_completed_audit as last_audit_date,
       -- Route completion rate
       COUNT(DISTINCT CASE WHEN rt.route_date > CURRENT_DATE - INTERVAL '30 days' THEN rt.id END) as routes_30d,
       COUNT(DISTINCT CASE WHEN rt.route_date > CURRENT_DATE - INTERVAL '30 days' AND rt.actual_km IS NOT NULL THEN rt.id END) as completed_routes_30d
