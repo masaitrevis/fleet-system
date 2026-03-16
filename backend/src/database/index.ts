@@ -497,6 +497,125 @@ const createTables = async () => {
     )
   `);
 
+  // ==================== WORKSHOP: STOCK & INVOICING ====================
+  
+  // Stock parts catalog
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stock_parts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      part_number VARCHAR(100) UNIQUE NOT NULL,
+      part_name VARCHAR(255) NOT NULL,
+      description TEXT,
+      category VARCHAR(100),
+      manufacturer VARCHAR(255),
+      supplier VARCHAR(255),
+      unit_cost DECIMAL(10,2) DEFAULT 0,
+      quantity_on_hand INTEGER DEFAULT 0,
+      reorder_level INTEGER DEFAULT 5,
+      location_bin VARCHAR(100),
+      compatible_vehicles JSONB DEFAULT '[]',
+      created_by UUID REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP
+    )
+  `);
+  
+  // Stock usage (links parts to repairs/job cards)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stock_usage (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      part_id UUID REFERENCES stock_parts(id),
+      quantity_used DECIMAL(10,2) NOT NULL,
+      unit_cost DECIMAL(10,2),
+      repair_id UUID REFERENCES repairs(id),
+      job_card_id UUID REFERENCES job_cards(id),
+      notes TEXT,
+      used_by UUID REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Stock adjustments (manual corrections)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stock_adjustments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      part_id UUID REFERENCES stock_parts(id),
+      adjustment INTEGER NOT NULL,
+      reason TEXT,
+      adjusted_by UUID REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Customers (for invoicing)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      customer_name VARCHAR(255) NOT NULL,
+      customer_email VARCHAR(255),
+      customer_phone VARCHAR(50),
+      customer_address TEXT,
+      tax_number VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP
+    )
+  `);
+  
+  // Invoices
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invoices (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      invoice_number VARCHAR(100) UNIQUE NOT NULL,
+      customer_id UUID REFERENCES customers(id),
+      job_card_id UUID REFERENCES job_cards(id),
+      vehicle_id UUID REFERENCES vehicles(id),
+      invoice_date DATE NOT NULL,
+      due_date DATE,
+      status VARCHAR(50) DEFAULT 'Draft',
+      subtotal DECIMAL(10,2) DEFAULT 0,
+      tax_amount DECIMAL(10,2) DEFAULT 0,
+      total DECIMAL(10,2) DEFAULT 0,
+      amount_paid DECIMAL(10,2) DEFAULT 0,
+      labor_hours DECIMAL(5,2),
+      labor_rate DECIMAL(10,2) DEFAULT 50,
+      labor_total DECIMAL(10,2),
+      notes TEXT,
+      created_by UUID REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP
+    )
+  `);
+  
+  // Invoice line items
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invoice_items (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
+      part_id UUID REFERENCES stock_parts(id),
+      description TEXT NOT NULL,
+      quantity DECIMAL(10,2) DEFAULT 1,
+      unit_price DECIMAL(10,2) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Invoice payments
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invoice_payments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
+      amount DECIMAL(10,2) NOT NULL,
+      payment_method VARCHAR(50) DEFAULT 'Cash',
+      reference VARCHAR(255),
+      notes TEXT,
+      received_by UUID REFERENCES users(id),
+      payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // ==================== CREATE INDEXES ====================
   await createIndexes();
 
@@ -572,7 +691,23 @@ const createIndexes = async () => {
     // Audit logs indexes
     { name: 'idx_audit_logs_user', table: 'system_audit_logs', column: 'user_id' },
     { name: 'idx_audit_logs_created', table: 'system_audit_logs', column: 'created_at' },
-    { name: 'idx_audit_logs_entity', table: 'system_audit_logs', column: 'entity_type, entity_id' }
+    { name: 'idx_audit_logs_entity', table: 'system_audit_logs', column: 'entity_type, entity_id' },
+    
+    // Stock/Parts indexes
+    { name: 'idx_stock_parts_number', table: 'stock_parts', column: 'part_number' },
+    { name: 'idx_stock_parts_category', table: 'stock_parts', column: 'category' },
+    { name: 'idx_stock_usage_part_id', table: 'stock_usage', column: 'part_id' },
+    { name: 'idx_stock_usage_repair_id', table: 'stock_usage', column: 'repair_id' },
+    { name: 'idx_stock_usage_job_card_id', table: 'stock_usage', column: 'job_card_id' },
+    
+    // Invoice indexes
+    { name: 'idx_invoices_number', table: 'invoices', column: 'invoice_number' },
+    { name: 'idx_invoices_customer_id', table: 'invoices', column: 'customer_id' },
+    { name: 'idx_invoices_job_card_id', table: 'invoices', column: 'job_card_id' },
+    { name: 'idx_invoices_status', table: 'invoices', column: 'status' },
+    { name: 'idx_invoices_date', table: 'invoices', column: 'invoice_date' },
+    { name: 'idx_invoice_items_invoice_id', table: 'invoice_items', column: 'invoice_id' },
+    { name: 'idx_invoice_payments_invoice_id', table: 'invoice_payments', column: 'invoice_id' }
   ];
 
   for (const idx of indexes) {
