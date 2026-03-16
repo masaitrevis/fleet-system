@@ -5,10 +5,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-const AI_ENABLED = !!process.env.OPENAI_API_KEY;
-
-export { AI_ENABLED };
-
 /**
  * AI Service for Fleet Management
  * Provides intelligent insights, predictions, and recommendations
@@ -795,6 +791,8 @@ const processRuleBasedChat = async (queryText: string): Promise<string> => {
 };
 
 // ==================== EXPORT ====================
+
+export const AI_ENABLED = !!process.env.OPENAI_API_KEY;
 
 export default {
   generateFleetRecommendations,
