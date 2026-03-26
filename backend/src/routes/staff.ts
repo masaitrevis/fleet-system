@@ -34,13 +34,14 @@ router.post('/', async (req, res) => {
     const id = uuidv4();
     await query(`
       INSERT INTO staff (id, staff_no, staff_name, email, phone, designation, department, branch, role, comments)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     `, [id, staff_no, staff_name, email, phone, designation, department, branch, role, comments]);
     
-    const result = await query('SELECT * FROM staff WHERE id = ?', [id]);
+    const result = await query('SELECT * FROM staff WHERE id = $1', [id]);
     res.status(201).json(result[0]);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create staff' });
+  } catch (error: any) {
+    console.error('Create staff error:', error);
+    res.status(500).json({ error: 'Failed to create staff', details: error.message });
   }
 });
 
@@ -85,10 +86,11 @@ router.put('/:id', async (req, res) => {
 // Delete staff
 router.delete('/:id', async (req, res) => {
   try {
-    await query('DELETE FROM staff WHERE id = ?', [req.params.id]);
+    await query('DELETE FROM staff WHERE id = $1', [req.params.id]);
     res.json({ message: 'Staff deleted' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete staff' });
+  } catch (error: any) {
+    console.error('Delete staff error:', error);
+    res.status(500).json({ error: 'Failed to delete staff', details: error.message });
   }
 });
 
