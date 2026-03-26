@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import FleetIntelligenceWidget from './FleetIntelligenceWidget';
 import RiskAlertsPanel from './RiskAlertsPanel';
+import CompanyAnalyticsPanel from './CompanyAnalyticsPanel';
 
 interface DashboardProps {
   apiUrl: string;
@@ -337,6 +338,9 @@ export default function Dashboard({ apiUrl, user }: DashboardProps) {
           </button>
         </div>
       </div>
+
+      {/* Company Analytics Panel (Admin/Managers only) */}
+      <CompanyAnalyticsPanel apiUrl={apiUrl} user={user} />
 
       {/* Fleet Intelligence Widget */}
       <div className="mb-8">

@@ -1,266 +1,237 @@
-import crypto from 'crypto';
 import { query } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 
-// Webhook delivery queue (in-memory, consider Redis for production)
-const deliveryQueue: WebhookDelivery[] = [];
+/**
+ * Webhook Service for event notifications
+ * Supports: training completion, stock alerts, vehicle maintenance alerts
+ */
 
-interface WebhookDelivery {
-  id: string;
-  webhookId: string;
-  eventType: string;
-  payload: any;
-  attemptNumber: number;
-  maxAttempts: number;
+interface WebhookPayload {
+  event: string;
+  timestamp: string;
+  data: any;
 }
 
-// Generate webhook signature
-export const generateSignature = (payload: string, secret: string): string => {
-  return crypto
-    .createHmac('sha256', secret)
-    .update(payload)
-    .digest('hex');
-};
-
-// Verify webhook signature
-export const verifySignature = (payload: string, signature: string, secret: string): boolean => {
-  const expected = generateSignature(payload, secret);
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expected)
-  );
-};
-
-// Create webhook
-export const createWebhook = async (data: {
-  name: string;
-  url: string;
-  events: string[];
-  createdBy: string;
-  headers?: Record<string, string>;
-}): Promise<{ webhook: any; secret: string }> => {
-  const secret = crypto.randomBytes(32).toString('hex');
-  const id = uuidv4();
-  
-  const result = await query(
-    `INSERT INTO webhooks (id, name, url, secret, events, created_by, headers)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [
-      id,
-      data.name,
-      data.url,
-      secret,
-      JSON.stringify(data.events),
-      data.createdBy,
-      JSON.stringify(data.headers || {})
-    ]
-  );
-  
-  return { webhook: result[0], secret };
-};
-
-// Get all webhooks
-export const getWebhooks = async (): Promise<any[]> => {
-  return await query(
-    `SELECT id, name, url, events, is_active, created_at, last_triggered_at, failure_count
-     FROM webhooks ORDER BY created_at DESC`
-  );
-};
-
-// Get webhook by ID
-export const getWebhookById = async (id: string): Promise<any | null> => {
-  const result = await query('SELECT * FROM webhooks WHERE id = $1', [id]);
-  return result.length > 0 ? result[0] : null;
-};
-
-// Update webhook
-export const updateWebhook = async (id: string, data: Partial<any>): Promise<any | null> => {
-  const allowedFields = ['name', 'url', 'events', 'is_active', 'headers'];
-  const updates: string[] = [];
-  const values: any[] = [];
-  let paramIndex = 1;
-  
-  for (const [key, value] of Object.entries(data)) {
-    if (allowedFields.includes(key)) {
-      updates.push(`${key} = $${paramIndex}`);
-      values.push(key === 'events' || key === 'headers' ? JSON.stringify(value) : value);
-      paramIndex++;
-    }
-  }
-  
-  if (updates.length === 0) return null;
-  
-  values.push(id);
-  
-  const result = await query(
-    `UPDATE webhooks SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP 
-     WHERE id = $${paramIndex} RETURNING *`,
-    values
-  );
-  
-  return result.length > 0 ? result[0] : null;
-};
-
-// Delete webhook
-export const deleteWebhook = async (id: string): Promise<boolean> => {
-  const result = await query('DELETE FROM webhooks WHERE id = $1 RETURNING id', [id]);
-  return result.length > 0;
-};
-
-// Trigger webhook event
-export const triggerWebhook = async (eventType: string, payload: any) => {
-  // Find active webhooks subscribed to this event
-  const webhooks = await query(
-    `SELECT * FROM webhooks 
-     WHERE is_active = true AND events @> $1::jsonb`,
-    [JSON.stringify([eventType])]
-  );
-  
-  for (const webhook of webhooks) {
-    const delivery: WebhookDelivery = {
-      id: uuidv4(),
-      webhookId: webhook.id,
-      eventType,
-      payload,
-      attemptNumber: 0,
-      maxAttempts: 3
-    };
-    
-    // Add to queue for immediate processing
-    deliveryQueue.push(delivery);
-    
-    // Process immediately (async)
-    processDelivery(delivery, webhook);
-  }
-  
-  return webhooks.length;
-};
-
-// Process webhook delivery
-const processDelivery = async (delivery: WebhookDelivery, webhook: any) => {
-  delivery.attemptNumber++;
-  
-  const payload = JSON.stringify({
-    event: delivery.eventType,
-    data: delivery.payload,
-    timestamp: new Date().toISOString(),
-    deliveryId: delivery.id
-  });
-  
-  const signature = generateSignature(payload, webhook.secret);
-  
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Webhook-Signature': signature,
-    'X-Webhook-Event': delivery.eventType,
-    'X-Webhook-ID': delivery.id,
-    'User-Agent': 'FleetPro-Webhook/1.0',
-    ...JSON.parse(webhook.headers || '{}')
-  };
-  
+/**
+ * Emit a webhook event to all registered listeners
+ */
+export const emitWebhookEvent = async (eventType: string, data: any): Promise<void> => {
   try {
+    // Find all active webhooks subscribed to this event
+    const webhooks = await query(`
+      SELECT * FROM webhooks 
+      WHERE is_active = true 
+      AND (event_types @> $1::jsonb OR event_types = '["*"]')
+    `, [JSON.stringify([eventType])]);
+
+    for (const webhook of webhooks) {
+      try {
+        await deliverWebhook(webhook, {
+          event: eventType,
+          timestamp: new Date().toISOString(),
+          data
+        });
+      } catch (error) {
+        console.error(`Failed to deliver webhook ${webhook.id}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('Error emitting webhook event:', error);
+  }
+};
+
+/**
+ * Deliver a webhook to its endpoint
+ */
+const deliverWebhook = async (webhook: any, payload: WebhookPayload): Promise<void> => {
+  const deliveryId = uuidv4();
+  const startTime = Date.now();
+
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Webhook-ID': webhook.id,
+      'X-Webhook-Event': payload.event,
+      'X-Webhook-Timestamp': payload.timestamp,
+      ...webhook.headers
+    };
+
+    // Add signature if secret is configured
+    if (webhook.secret) {
+      const crypto = await import('crypto');
+      const signature = crypto
+        .createHmac('sha256', webhook.secret)
+        .update(JSON.stringify(payload))
+        .digest('hex');
+      headers['X-Webhook-Signature'] = `sha256=${signature}`;
+    }
+
     const response = await fetch(webhook.url, {
       method: 'POST',
       headers,
-      body: payload,
-      signal: AbortSignal.timeout(30000) // 30 second timeout
-    });
-    
+      body: JSON.stringify(payload),
+      timeout: 30000 // 30 second timeout
+    } as any);
+
+    const responseTime = Date.now() - startTime;
     const responseBody = await response.text();
-    
+
     // Log delivery
-    await query(
-      `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, response_status, response_body, attempt_number, delivered_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
-      [delivery.id, webhook.id, delivery.eventType, payload, response.status, responseBody, delivery.attemptNumber]
-    );
-    
-    // Update webhook stats
-    await query(
-      `UPDATE webhooks SET last_triggered_at = CURRENT_TIMESTAMP, failure_count = 0 WHERE id = $1`,
-      [webhook.id]
-    );
-    
-    // Remove from queue if successful
-    if (response.ok) {
-      const index = deliveryQueue.findIndex(d => d.id === delivery.id);
-      if (index > -1) deliveryQueue.splice(index, 1);
-    } else if (delivery.attemptNumber < delivery.maxAttempts) {
-      // Retry with exponential backoff
-      const delay = Math.pow(2, delivery.attemptNumber) * 1000;
-      setTimeout(() => processDelivery(delivery, webhook), delay);
-    } else {
-      // Max retries reached, increment failure count
-      await query(
-        `UPDATE webhooks SET failure_count = failure_count + 1 WHERE id = $1`,
-        [webhook.id]
-      );
+    await query(`
+      INSERT INTO webhook_deliveries (
+        id, webhook_id, event_type, payload, response_status, 
+        response_body, delivered_at, attempt_number
+      ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, 1)
+    `, [
+      deliveryId,
+      webhook.id,
+      payload.event,
+      JSON.stringify(payload),
+      response.status,
+      responseBody.substring(0, 1000) // Limit response size
+    ]);
+
+    // Update webhook last triggered
+    await query(`
+      UPDATE webhooks 
+      SET last_triggered_at = CURRENT_TIMESTAMP, failure_count = 0
+      WHERE id = $1
+    `, [webhook.id]);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${responseBody}`);
     }
+
   } catch (error: any) {
     // Log failed delivery
-    await query(
-      `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, error_message, attempt_number)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [delivery.id, webhook.id, delivery.eventType, payload, error.message, delivery.attemptNumber]
-    );
-    
-    if (delivery.attemptNumber < delivery.maxAttempts) {
-      // Retry with exponential backoff
-      const delay = Math.pow(2, delivery.attemptNumber) * 1000;
-      setTimeout(() => processDelivery(delivery, webhook), delay);
-    } else {
-      await query(
-        `UPDATE webhooks SET failure_count = failure_count + 1 WHERE id = $1`,
-        [webhook.id]
-      );
-    }
+    await query(`
+      INSERT INTO webhook_deliveries (
+        id, webhook_id, event_type, payload, error_message, attempt_number
+      ) VALUES ($1, $2, $3, $4, $5, 1)
+    `, [
+      deliveryId,
+      webhook.id,
+      payload.event,
+      JSON.stringify(payload),
+      error.message
+    ]);
+
+    // Increment failure count
+    await query(`
+      UPDATE webhooks 
+      SET failure_count = failure_count + 1
+      WHERE id = $1
+    `, [webhook.id]);
+
+    // Deactivate webhook after 5 consecutive failures
+    await query(`
+      UPDATE webhooks 
+      SET is_active = false
+      WHERE id = $1 AND failure_count >= 5
+    `, [webhook.id]);
+
+    throw error;
   }
 };
 
-// Get webhook delivery logs
-export const getWebhookLogs = async (webhookId: string, limit: number = 50): Promise<any[]> => {
-  return await query(
-    `SELECT * FROM webhook_deliveries 
-     WHERE webhook_id = $1 
-     ORDER BY created_at DESC LIMIT $2`,
-    [webhookId, limit]
-  );
-};
-
-// Test webhook
-export const testWebhook = async (webhookId: string): Promise<{ success: boolean; message: string }> => {
-  const webhook = await getWebhookById(webhookId);
-  if (!webhook) {
-    return { success: false, message: 'Webhook not found' };
-  }
-  
-  const testPayload = {
-    event: 'test',
-    data: { message: 'This is a test webhook' },
-    timestamp: new Date().toISOString()
-  };
-  
-  const payload = JSON.stringify(testPayload);
-  const signature = generateSignature(payload, webhook.secret);
-  
+/**
+ * Retry failed webhook deliveries
+ */
+export const retryFailedDeliveries = async (): Promise<void> => {
   try {
-    const response = await fetch(webhook.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Signature': signature,
-        'X-Webhook-Event': 'test'
-      },
-      body: payload,
-      signal: AbortSignal.timeout(10000)
-    });
-    
-    if (response.ok) {
-      return { success: true, message: `Webhook responded with ${response.status}` };
-    } else {
-      return { success: false, message: `Webhook responded with ${response.status}` };
+    // Get failed deliveries from last 24 hours
+    const failedDeliveries = await query(`
+      SELECT wd.*, w.url, w.secret, w.headers
+      FROM webhook_deliveries wd
+      JOIN webhooks w ON w.id = wd.webhook_id
+      WHERE wd.delivered_at IS NULL
+      AND wd.attempt_number < 5
+      AND wd.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+      ORDER BY wd.created_at DESC
+      LIMIT 50
+    `);
+
+    for (const delivery of failedDeliveries) {
+      try {
+        const payload = JSON.parse(delivery.payload);
+        
+        await deliverWebhook(
+          { ...delivery, id: delivery.webhook_id },
+          payload
+        );
+
+        // Update attempt count
+        await query(`
+          UPDATE webhook_deliveries 
+          SET attempt_number = attempt_number + 1
+          WHERE id = $1
+        `, [delivery.id]);
+
+      } catch (error) {
+        console.error(`Retry failed for delivery ${delivery.id}:`, error);
+      }
     }
-  } catch (error: any) {
-    return { success: false, message: `Failed to call webhook: ${error.message}` };
+  } catch (error) {
+    console.error('Error retrying failed deliveries:', error);
   }
 };
+
+/**
+ * Register a new webhook
+ */
+export const registerWebhook = async (
+  userId: string,
+  url: string,
+  eventTypes: string[],
+  options: {
+    secret?: string;
+    description?: string;
+    headers?: Record<string, string>;
+  } = {}
+): Promise<string> => {
+  const webhookId = uuidv4();
+  
+  await query(`
+    INSERT INTO webhooks (
+      id, user_id, url, event_types, secret, description, headers, is_active
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+  `, [
+    webhookId,
+    userId,
+    url,
+    JSON.stringify(eventTypes),
+    options.secret || null,
+    options.description || null,
+    JSON.stringify(options.headers || {})
+  ]);
+
+  return webhookId;
+};
+
+/**
+ * Unregister a webhook
+ */
+export const unregisterWebhook = async (webhookId: string, userId: string): Promise<void> => {
+  await query(`
+    DELETE FROM webhooks 
+    WHERE id = $1 AND user_id = $2
+  `, [webhookId, userId]);
+};
+
+/**
+ * Get webhook delivery history
+ */
+export const getDeliveryHistory = async (
+  webhookId: string,
+  limit: number = 50
+): Promise<any[]> => {
+  return await query(`
+    SELECT * FROM webhook_deliveries
+    WHERE webhook_id = $1
+    ORDER BY created_at DESC
+    LIMIT $2
+  `, [webhookId, limit]);
+};
+
+// Schedule retry of failed deliveries every 5 minutes
+setInterval(retryFailedDeliveries, 5 * 60 * 1000);

@@ -1,21 +1,24 @@
 import { useState } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Fleet from './components/Fleet';
 import Staff from './components/Staff';
-import Routes from './components/Routes';
+import RoutesComponent from './components/Routes';
 import Fuel from './components/Fuel';
 import Repairs from './components/Repairs';
 import Upload from './components/Upload';
 import Reports from './components/Reports';
 import Analytics from './components/Analytics';
 import Accidents from './components/Accidents';
-import Audits from './components/Audits';
 import Training from './components/Training';
 import RequisitionModule from './components/requisition/RequisitionModule';
 import SecurityDashboard from './components/SecurityDashboard';
-import Integrations from './components/Integrations/Integrations';
+import IntegrationsPage from './pages/IntegrationsPage';
+import SettingsPage from './pages/SettingsPage';
+import AuditsPage from './pages/AuditsPage';
+import AuditDetailPage from './pages/AuditDetailPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getEffectiveRole } from './utils/roles';
 
@@ -24,72 +27,55 @@ import OperationsDashboard from './components/OperationsDashboard';
 import Workshop from './components/Workshop/Workshop';
 import AIChatbot from './components/AIChatbot';
 
-export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'training' | 'requisitions' | 'security' | 'integrations' | 'operations' | 'workshop' | 'admin';
+export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'training' | 'requisitions' | 'security' | 'integrations' | 'settings' | 'operations' | 'workshop' | 'admin';
 
 // Force correct API URL - env vars not reliable in Netlify
 const API_URL = 'https://fleet-api-0272.onrender.com/api';
 
-function AppContent() {
-  const [currentView, setCurrentView] = useState<View>('dashboard');
+// Navigation items configuration
+const navItems: { key: View; label: string; icon: string; roles: string[]; path: string }[] = [
+  { key: 'dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'], path: '/' },
+  { key: 'security', label: 'Security', icon: '🔒', roles: ['admin', 'manager', 'security', 'transport_supervisor', 'hod'], path: '/security' },
+  { key: 'requisitions', label: 'Requisitions', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'dept_supervisor', 'hod'], path: '/requisitions' },
+  { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'hod', 'security'], path: '/accidents' },
+  { key: 'audits', label: 'Audits', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer', 'transport_supervisor', 'hod'], path: '/audits' },
+  { key: 'training', label: 'Training', icon: '🎓', roles: ['admin', 'manager', 'hod', 'driver', 'viewer', 'transport_supervisor', 'dept_supervisor', 'security', 'auditor'], path: '/training' },
+  { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'], path: '/fleet' },
+  { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager', 'hod'], path: '/staff' },
+  { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'], path: '/routes' },
+  { key: 'operations', label: 'Operations', icon: '📺', roles: ['admin', 'manager', 'transport_supervisor', 'hod'], path: '/operations' },
+  { key: 'fuel', label: 'Fuel', icon: '⛽', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'], path: '/fuel' },
+  { key: 'repairs', label: 'Repairs', icon: '🔧', roles: ['admin', 'manager', 'transport_supervisor', 'hod'], path: '/repairs' },
+  { key: 'workshop', label: 'Workshop', icon: '🏭', roles: ['admin', 'manager', 'transport_supervisor', 'hod'], path: '/workshop' },
+  { key: 'analytics', label: 'Analytics', icon: '📈', roles: ['admin', 'manager', 'hod'], path: '/analytics' },
+  { key: 'reports', label: 'Reports', icon: '📝', roles: ['admin', 'manager', 'hod', 'transport_supervisor'], path: '/reports' },
+  { key: 'upload', label: 'Import', icon: '📤', roles: ['admin', 'manager'], path: '/upload' },
+  { key: 'integrations', label: 'Integrations', icon: '🔗', roles: ['admin', 'manager'], path: '/integrations' },
+  { key: 'settings', label: 'Settings', icon: '⚙️', roles: ['admin', 'manager', 'hod'], path: '/settings' },
+  { key: 'admin', label: 'Admin', icon: '🔧', roles: ['admin'], path: '/admin' },
+];
+
+function AppLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isAuthenticated, logout, user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   if (!isAuthenticated) {
     return <Login onLogin={() => {}} />;
   }
 
-  const navItems: { key: View; label: string; icon: string; roles: string[] }[] = [
-    { key: 'dashboard', label: 'Dashboard', icon: '📊', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
-    { key: 'security', label: 'Security', icon: '🔒', roles: ['admin', 'manager', 'security', 'transport_supervisor', 'hod'] },
-    { key: 'requisitions', label: 'Requisitions', icon: '🚗', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'dept_supervisor', 'hod'] },
-    { key: 'accidents', label: 'Accidents', icon: '🚨', roles: ['admin', 'manager', 'viewer', 'driver', 'transport_supervisor', 'hod', 'security'] },
-    { key: 'audits', label: 'Audits', icon: '📋', roles: ['admin', 'manager', 'auditor', 'viewer', 'transport_supervisor', 'hod'] },
-    { key: 'training', label: 'Training', icon: '🎓', roles: ['admin', 'manager', 'hod', 'driver', 'viewer', 'transport_supervisor', 'dept_supervisor', 'security', 'auditor'] },
-    { key: 'fleet', label: 'Fleet', icon: '🚙', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'dept_supervisor', 'hod', 'security'] },
-    { key: 'staff', label: 'Staff', icon: '👥', roles: ['admin', 'manager', 'hod'] },
-    { key: 'routes', label: 'Routes', icon: '🛣️', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
-    { key: 'operations', label: 'Operations', icon: '📺', roles: ['admin', 'manager', 'transport_supervisor', 'hod'] },
-    { key: 'fuel', label: 'Fuel', icon: '⛽', roles: ['admin', 'manager', 'viewer', 'transport_supervisor', 'hod'] },
-    { key: 'repairs', label: 'Repairs', icon: '🔧', roles: ['admin', 'manager', 'transport_supervisor', 'hod'] },
-    { key: 'workshop', label: 'Workshop', icon: '🏭', roles: ['admin', 'manager', 'transport_supervisor', 'hod'] },
-    { key: 'analytics', label: 'Analytics', icon: '📈', roles: ['admin', 'manager', 'hod'] },
-    { key: 'reports', label: 'Reports', icon: '📝', roles: ['admin', 'manager', 'hod', 'transport_supervisor'] },
-    { key: 'upload', label: 'Import', icon: '📤', roles: ['admin', 'manager'] },
-    { key: 'integrations', label: 'Integrations', icon: '🔗', roles: ['admin', 'manager'] },
-    { key: 'admin', label: 'Admin', icon: '⚙️', roles: ['admin'] },
-  ];
-
   const effectiveRole = getEffectiveRole(user);
-
   const filteredNav = navItems.filter(item => item.roles.includes(effectiveRole));
 
-  const handleNavClick = (key: View) => {
-    setCurrentView(key);
-    setMobileMenuOpen(false);
-  };
+  // Find current view based on path
+  const currentView = navItems.find(item => 
+    location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+  )?.key || 'dashboard';
 
-  const renderView = () => {
-    switch (currentView) {
-      case 'dashboard': return <Dashboard apiUrl={API_URL} user={user} />;
-      case 'security': return <SecurityDashboard apiUrl={API_URL} user={user} />;
-      case 'requisitions': return <RequisitionModule apiUrl={API_URL} user={user} />;
-      case 'accidents': return <Accidents apiUrl={API_URL} user={user} />;
-      case 'audits': return <Audits apiUrl={API_URL} user={user} />;
-      case 'training': return <Training apiUrl={API_URL} user={user} />;
-      case 'operations': return <OperationsDashboard apiUrl={API_URL} user={user} />;
-      case 'workshop': return <Workshop apiUrl={API_URL} user={user} />;
-      case 'fleet': return <Fleet apiUrl={API_URL} />;
-      case 'staff': return <Staff apiUrl={API_URL} />;
-      case 'routes': return <Routes apiUrl={API_URL} />;
-      case 'fuel': return <Fuel apiUrl={API_URL} />;
-      case 'repairs': return <Repairs apiUrl={API_URL} />;
-      case 'analytics': return <Analytics apiUrl={API_URL} />;
-      case 'upload': return <Upload apiUrl={API_URL} />;
-      case 'reports': return <Reports apiUrl={API_URL} />;
-      case 'integrations': return <Integrations apiUrl={API_URL} />;
-      case 'admin': return <Admin apiUrl={API_URL} />;
-      default: return <Dashboard apiUrl={API_URL} user={user} />;
-    }
+  const handleNavClick = (path: string) => {
+    navigate(path);
+    setMobileMenuOpen(false);
   };
 
   return (
@@ -126,7 +112,7 @@ function AppContent() {
             {filteredNav.map((item) => (
               <button
                 key={item.key}
-                onClick={() => handleNavClick(item.key)}
+                onClick={() => handleNavClick(item.path)}
                 className={`text-left px-3 py-3 md:px-4 md:py-3 rounded-lg flex items-center gap-2 md:gap-3 transition-colors text-sm md:text-base ${
                   currentView === item.key
                     ? 'bg-blue-50 text-blue-600 font-medium'
@@ -171,7 +157,31 @@ function AppContent() {
       {/* Main Content */}
       <main className="flex-1 p-4 md:p-8 overflow-auto min-h-0">
         <ErrorBoundary>
-          {renderView()}
+          <Routes>
+            <Route path="/" element={<Dashboard apiUrl={API_URL} user={user} />} />
+            <Route path="/security" element={<SecurityDashboard apiUrl={API_URL} user={user} />} />
+            <Route path="/requisitions" element={<RequisitionModule apiUrl={API_URL} user={user} />} />
+            <Route path="/accidents" element={<Accidents apiUrl={API_URL} user={user} />} />
+            <Route path="/audits" element={<AuditsPage apiUrl={API_URL} user={user} />} />
+            <Route path="/audits/:id" element={<AuditDetailPage apiUrl={API_URL} user={user} />} />
+            
+            <Route path="/training" element={<Training apiUrl={API_URL} user={user} />} />
+            <Route path="/operations" element={<OperationsDashboard apiUrl={API_URL} user={user} />} />
+            <Route path="/workshop" element={<Workshop apiUrl={API_URL} user={user} />} />
+            <Route path="/fleet" element={<Fleet apiUrl={API_URL} />} />
+            <Route path="/staff" element={<Staff apiUrl={API_URL} />} />
+            <Route path="/routes" element={<RoutesComponent apiUrl={API_URL} />} />
+            <Route path="/fuel" element={<Fuel apiUrl={API_URL} />} />
+            <Route path="/repairs" element={<Repairs apiUrl={API_URL} />} />
+            <Route path="/analytics" element={<Analytics apiUrl={API_URL} />} />
+            <Route path="/upload" element={<Upload apiUrl={API_URL} />} />
+            <Route path="/reports" element={<Reports apiUrl={API_URL} />} />
+            <Route path="/integrations" element={<IntegrationsPage apiUrl={API_URL} />} />
+            <Route path="/settings" element={<SettingsPage apiUrl={API_URL} />} />
+            <Route path="/admin" element={<Admin apiUrl={API_URL} />} />
+            
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </ErrorBoundary>
       </main>
 
@@ -184,7 +194,7 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <AppLayout />
     </AuthProvider>
   );
 }

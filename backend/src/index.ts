@@ -28,9 +28,16 @@ import auditRoutes from './routes/audits';
 import trainingRoutes from './routes/training';
 import auditScheduleRoutes from './routes/audit-schedules';
 import integrationRoutes from './routes/integrations';
+import integrationProvidersRoutes from './routes/integration-providers';
+import settingsRoutes from './routes/settings';
 import operationsRoutes from './routes/operations';
 import workshopRoutes from './routes/workshop';
 import riskIntelligenceRoutes from './routes/riskIntelligence';
+import photoRoutes from './routes/photos';
+import webhookRoutes from './routes/webhooks';
+import inspectionRoutes from './routes/inspections';
+import apiV1Routes from './routes/api/v1';
+import seedDemoRoutes from './routes/seed-demo';
 
 // Import services for webhooks and operations
 import * as webhookService from './services/webhook';
@@ -157,6 +164,9 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// Demo data seeder (public endpoint)
+app.use('/api/seed-demo', seedDemoRoutes);
+
 // Public routes
 app.use('/api/auth', authRateLimiter, authRoutes);
 
@@ -179,6 +189,12 @@ app.use('/api/audit-schedules', authenticateToken, auditScheduleRoutes);
 // Integration routes (includes public API with API key auth)
 app.use('/api/integrations', integrationRoutes);
 
+// Integration providers (ERP, telematics, fuel cards, etc.)
+app.use('/api/integrations/providers', authenticateToken, integrationProvidersRoutes);
+
+// Settings routes
+app.use('/api/settings', authenticateToken, settingsRoutes);
+
 // Operations routes (AI features, live status, fleet health)
 app.use('/api/operations', authenticateToken, operationsRoutes);
 
@@ -187,6 +203,21 @@ app.use('/api/workshop', authenticateToken, workshopRoutes);
 
 // Risk Intelligence routes (AI-powered fleet risk analysis)
 app.use('/api/risk-intelligence', authenticateToken, riskIntelligenceRoutes);
+
+// Photo evidence routes (audit & inspection photos)
+app.use('/api/photos', authenticateToken, photoRoutes);
+
+// Webhook management routes
+app.use('/api/webhooks', authenticateToken, webhookRoutes);
+
+// Vehicle Inspection routes
+app.use('/api/inspections', authenticateToken, inspectionRoutes);
+
+// REST API v1 (with API key auth support)
+app.use('/api/v1', apiV1Routes);
+
+// Static file serving for uploads
+app.use('/uploads', express.static(process.env.UPLOAD_DIR || './uploads'));
 
 // Error logging (before error handler)
 app.use(errorLogger);

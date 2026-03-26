@@ -1372,6 +1372,9 @@ export const runMigrations = async () => {
   
   console.log('🔧 Running additional migrations...');
   
+  // Run inspection module migration
+  await runInspectionMigration(pool);
+  
   // Add deleted_at to staff table for consistency
   try {
     await pool.query(`
@@ -1382,6 +1385,111 @@ export const runMigrations = async () => {
     console.log('✅ Staff soft-delete columns added');
   } catch (err: any) {
     console.error('❌ Staff migration failed:', err.message);
+  }
+
+  // ==================== PHOTO EVIDENCE TABLES ====================
+  
+  // Audit photos table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS audit_photos (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        audit_id UUID NOT NULL,
+        audit_session_id UUID,
+        question_id UUID NOT NULL,
+        image_url VARCHAR(500) NOT NULL,
+        thumbnail_url VARCHAR(500),
+        file_size INTEGER,
+        mime_type VARCHAR(50),
+        uploaded_by UUID REFERENCES users(id),
+        company_id UUID,
+        issue_type VARCHAR(50),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ Audit photos table created');
+  } catch (err: any) {
+    console.error('❌ Audit photos migration failed:', err.message);
+  }
+
+  // Inspection photos table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inspection_photos (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        inspection_id UUID NOT NULL,
+        job_card_id UUID,
+        image_url VARCHAR(500) NOT NULL,
+        thumbnail_url VARCHAR(500),
+        file_size INTEGER,
+        mime_type VARCHAR(50),
+        issue_description TEXT,
+        severity VARCHAR(20) DEFAULT 'medium',
+        uploaded_by UUID REFERENCES users(id),
+        company_id UUID,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ Inspection photos table created');
+  } catch (err: any) {
+    console.error('❌ Inspection photos migration failed:', err.message);
+  }
+
+  // Add company_id to existing tables for multi-tenant isolation
+  const tablesNeedingCompanyId = [
+    'vehicles', 'staff', 'routes', 'fuel_records', 'repairs', 
+    'inventory_items', 'inventory_categories', 'training_courses',
+    'audit_sessions', 'job_cards', 'accidents'
+  ];
+  
+  for (const table of tablesNeedingCompanyId) {
+    try {
+      await pool.query(`
+        ALTER TABLE ${table} 
+        ADD COLUMN IF NOT EXISTS company_id UUID
+      `);
+    } catch (err: any) {
+      console.error(`❌ Failed to add company_id to ${table}:`, err.message);
+    }
+  }
+  console.log('✅ Company ID columns added for multi-tenant support');
+};
+
+// Run inspection module migration
+const runInspectionMigration = async (pool: Pool) => {
+  console.log('🔧 Running inspection module migration...');
+  
+  try {
+    // Check if inspection tables already exist
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'vehicle_inspections'
+      )
+    `);
+    
+    if (tableCheck.rows[0].exists) {
+      console.log('✅ Inspection tables already exist, skipping migration');
+      return;
+    }
+    
+    // Read and execute the migration SQL
+    const fs = await import('fs');
+    const path = await import('path');
+    const migrationPath = path.join(__dirname, '../../database/migrations_20250324_inspection_module.sql');
+    
+    if (fs.existsSync(migrationPath)) {
+      const sql = fs.readFileSync(migrationPath, 'utf8');
+      await pool.query(sql);
+      console.log('✅ Inspection module migration completed');
+    } else {
+      console.log('⚠️ Inspection migration file not found, skipping');
+    }
+  } catch (err: any) {
+    console.error('❌ Inspection migration failed:', err.message);
   }
 };
 

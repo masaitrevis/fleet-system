@@ -1877,3 +1877,202 @@ export const getPredictiveMaintenanceSuggestions = async (): Promise<Array<{
     return priorityOrder[a.priority] - priorityOrder[b.priority];
   });
 };
+
+/**
+ * Generate training quiz questions based on course content
+ */
+export const generateTrainingQuestions = async (content: string, numQuestions: number = 5): Promise<Array<{
+  question: string;
+  options: string[];
+  correctAnswer: string;
+}>> => {
+  // If no OpenAI API key, return rule-based questions
+  if (!AI_ENABLED) {
+    return getRuleBasedQuestions(content, numQuestions);
+  }
+
+  try {
+    const prompt = `Based on the following training course content, generate ${numQuestions} multiple-choice quiz questions.
+
+Course Content:
+${content.substring(0, 3000)}
+
+Generate questions that:
+1. Test understanding of key concepts
+2. Are based specifically on the content provided
+3. Have 4 options each (A, B, C, D)
+4. Have only one correct answer
+
+Return ONLY a JSON array in this exact format:
+[
+  {
+    "question": "Question text here?",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "correctAnswer": "A"
+  }
+]`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { 
+          role: 'system', 
+          content: 'You are a training quiz generator. Generate questions based ONLY on the provided content. Return valid JSON.' 
+        },
+        { role: 'user', content: prompt }
+      ],
+      max_tokens: 1500,
+      temperature: 0.7
+    });
+
+    const content = response.choices[0].message.content || '[]';
+    // Extract JSON from possible markdown code blocks
+    const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/\[[\s\S]*\]/);
+    const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : content;
+    
+    const questions = JSON.parse(jsonStr);
+    
+    // Validate question format
+    return questions.filter((q: any) => 
+      q.question && 
+      Array.isArray(q.options) && 
+      q.options.length === 4 && 
+      ['A', 'B', 'C', 'D'].includes(q.correctAnswer)
+    ).slice(0, numQuestions);
+  } catch (error) {
+    console.error('AI question generation error:', error);
+    return getRuleBasedQuestions(content, numQuestions);
+  }
+};
+
+/**
+ * Fallback rule-based questions when AI is unavailable
+ */
+const getRuleBasedQuestions = (content: string, numQuestions: number): Array<{
+  question: string;
+  options: string[];
+  correctAnswer: string;
+}> => {
+  const questions: Array<{
+    question: string;
+    options: string[];
+    correctAnswer: string;
+  }> = [];
+
+  // Extract key topics from content
+  const has3SecondRule = content.toLowerCase().includes('3-second');
+  const hasScanning = content.toLowerCase().includes('scan') || content.toLowerCase().includes('mirror');
+  const hasDistraction = content.toLowerCase().includes('distraction') || content.toLowerCase().includes('phone');
+  const hasHOS = content.toLowerCase().includes('hours of service') || content.toLowerCase().includes('hos');
+  const hasDVIR = content.toLowerCase().includes('dvir') || content.toLowerCase().includes('inspection');
+  const hasFatigue = content.toLowerCase().includes('fatigue') || content.toLowerCase().includes('tired');
+  const hasAccident = content.toLowerCase().includes('accident');
+  const hasDrug = content.toLowerCase().includes('drug') || content.toLowerCase().includes('alcohol');
+
+  if (has3SecondRule) {
+    questions.push({
+      question: "What is the minimum following distance recommended under normal driving conditions?",
+      options: ["1 second", "2 seconds", "3 seconds", "5 seconds"],
+      correctAnswer: "C"
+    });
+    questions.push({
+      question: "In wet conditions, how should you adjust your following distance?",
+      options: ["Keep 3 seconds", "Increase to 4-5 seconds", "Decrease to 2 seconds", "Follow closer to see better"],
+      correctAnswer: "B"
+    });
+  }
+
+  if (hasScanning) {
+    questions.push({
+      question: "How often should you check your mirrors while driving?",
+      options: ["Every 30 seconds", "Every 5-8 seconds", "Only when changing lanes", "Once per minute"],
+      correctAnswer: "B"
+    });
+    questions.push({
+      question: "How far ahead should you look when driving in the city?",
+      options: ["1-1.5 blocks", "500 meters", "Just the car ahead", "As far as possible"],
+      correctAnswer: "A"
+    });
+  }
+
+  if (hasDistraction) {
+    questions.push({
+      question: "At 60 km/h, how far do you travel during a 2-second glance at your phone?",
+      options: ["10 meters", "17 meters", "33 meters", "50 meters"],
+      correctAnswer: "C"
+    });
+    questions.push({
+      question: "Which of the following is NOT a recommended way to manage distractions?",
+      options: ["Use hands-free devices", "Program GPS before driving", "Eat while driving when careful", "Pull over for complex tasks"],
+      correctAnswer: "C"
+    });
+  }
+
+  if (hasHOS) {
+    questions.push({
+      question: "What is the maximum daily driving time allowed?",
+      options: ["8 hours", "10 hours", "11 hours", "14 hours"],
+      correctAnswer: "C"
+    });
+    questions.push({
+      question: "How many consecutive hours off-duty are required before driving?",
+      options: ["8 hours", "10 hours", "11 hours", "12 hours"],
+      correctAnswer: "B"
+    });
+  }
+
+  if (hasDVIR) {
+    questions.push({
+      question: "When should you complete a DVIR (Daily Vehicle Inspection Report)?",
+      options: ["Only when defects are found", "At the beginning of each workday", "At the beginning and end of each workday", "Once per week"],
+      correctAnswer: "C"
+    });
+    questions.push({
+      question: "What should you do if you find a critical defect during inspection?",
+      options: ["Drive carefully to the garage", "Note it for next inspection", "Do not operate the vehicle", "Fix it yourself"],
+      correctAnswer: "C"
+    });
+  }
+
+  if (hasFatigue) {
+    questions.push({
+      question: "Which is a warning sign of driver fatigue?",
+      options: ["Increased alertness", "Frequent yawning", "Better fuel efficiency", "Improved reaction time"],
+      correctAnswer: "B"
+    });
+    questions.push({
+      question: "What should you do if you experience fatigue while driving?",
+      options: ["Open the window for fresh air", "Stop and rest immediately", "Drink coffee and continue", "Turn up the radio"],
+      correctAnswer: "B"
+    });
+  }
+
+  if (hasAccident) {
+    questions.push({
+      question: "What is the first priority after an accident?",
+      options: ["Call your insurance company", "Check for injuries and call emergency services", "Take photos of the damage", "Exchange insurance information"],
+      correctAnswer: "B"
+    });
+    questions.push({
+      question: "Within how long must you notify your supervisor after an accident?",
+      options: ["30 minutes", "1 hour", "2 hours", "End of shift"],
+      correctAnswer: "B"
+    });
+  }
+
+  if (hasDrug) {
+    questions.push({
+      question: "How many hours before duty should you refrain from alcohol?",
+      options: ["4 hours", "8 hours", "12 hours", "24 hours"],
+      correctAnswer: "B"
+    });
+    questions.push({
+      question: "What should you do if you suspect a coworker is impaired?",
+      options: ["Confront them directly", "Report to supervisor", "Ignore it if they're driving carefully", "Ask them to take a break"],
+      correctAnswer: "B"
+    });
+  }
+
+  // Shuffle and return requested number
+  return questions.sort(() => Math.random() - 0.5).slice(0, numQuestions);
+};

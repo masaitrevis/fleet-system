@@ -6,6 +6,167 @@ import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
 
+// Role-based access control for company analytics
+const canViewCompanyAnalytics = (role?: string): boolean => {
+  const allowedRoles = ['admin', 'fleet_manager', 'high_staff', 'manager', 'transport_supervisor'];
+  return allowedRoles.includes(role?.toLowerCase() || '');
+};
+
+// Get company analytics (admin/managers only)
+router.get('/company', authenticateToken, asyncHandler(async (req: any, res: Response) => {
+  const userRole = req.user?.role;
+  
+  if (!canViewCompanyAnalytics(userRole)) {
+    return res.status(403).json({ error: 'Access denied. Requires admin, fleet_manager, or high_staff role.' });
+  }
+
+  try {
+    // Vehicle stats
+    const vehicleRes = await query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN status = 'Active' THEN 1 END) as active,
+        COUNT(CASE WHEN status = 'Under Maintenance' THEN 1 END) as maintenance,
+        COUNT(CASE WHEN status = 'Retired' THEN 1 END) as retired
+      FROM vehicles 
+      WHERE deleted_at IS NULL
+    `);
+    
+    const totalVehicles = parseInt(vehicleRes[0]?.total || 0);
+    const activeVehicles = parseInt(vehicleRes[0]?.active || 0);
+    const maintenanceVehicles = parseInt(vehicleRes[0]?.maintenance || 0);
+    const retiredVehicles = parseInt(vehicleRes[0]?.retired || 0);
+
+    // Driver stats
+    const driverRes = await query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN deleted_at IS NULL THEN 1 END) as active
+      FROM staff 
+      WHERE role = 'Driver'
+    `);
+    const totalDrivers = parseInt(driverRes[0]?.total || 0);
+    const activeDrivers = parseInt(driverRes[0]?.active || 0);
+
+    // Fleet utilization (vehicles with recent routes)
+    const utilizationRes = await query(`
+      SELECT COUNT(DISTINCT vehicle_id) as count
+      FROM routes
+      WHERE route_date >= CURRENT_DATE - INTERVAL '7 days'
+    `);
+    const utilizedVehicles = parseInt(utilizationRes[0]?.count || 0);
+    const fleetUtilization = totalVehicles > 0 ? Math.round((utilizedVehicles / totalVehicles) * 100) : 0;
+
+    // Training stats
+    const trainingRes = await query(`
+      SELECT 
+        COUNT(*) as total_enrollments,
+        COUNT(CASE WHEN status = 'passed' THEN 1 END) as completed
+      FROM training_enrollments
+    `);
+    const totalEnrollments = parseInt(trainingRes[0]?.total_enrollments || 0);
+    const coursesCompleted = parseInt(trainingRes[0]?.completed || 0);
+
+    // Monthly fuel consumption
+    const fuelRes = await query(`
+      SELECT COALESCE(SUM(liters), 0) as total
+      FROM fuel_records
+      WHERE fuel_date >= CURRENT_DATE - INTERVAL '30 days'
+    `);
+    const monthlyFuelConsumption = parseFloat(fuelRes[0]?.total || 0);
+
+    // Monthly maintenance cost
+    const maintenanceRes = await query(`
+      SELECT COALESCE(SUM(cost), 0) as total
+      FROM repairs
+      WHERE date_in >= CURRENT_DATE - INTERVAL '30 days'
+    `);
+    const monthlyMaintenanceCost = parseFloat(maintenanceRes[0]?.total || 0);
+
+    // Accidents this month
+    const accidentRes = await query(`
+      SELECT COUNT(*) as count
+      FROM accidents
+      WHERE accident_date >= CURRENT_DATE - INTERVAL '30 days'
+    `);
+    const accidentsThisMonth = parseInt(accidentRes[0]?.count || 0);
+
+    // Vehicle status breakdown for pie chart
+    const vehicleStatusBreakdown = [
+      { name: 'Active', value: activeVehicles },
+      { name: 'Maintenance', value: maintenanceVehicles },
+      { name: 'Retired', value: retiredVehicles },
+      { name: 'Other', value: totalVehicles - activeVehicles - maintenanceVehicles - retiredVehicles }
+    ].filter(s => s.value > 0);
+
+    // Training progress for last 6 months
+    const months = [];
+    const trainingProgress = [];
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const monthName = date.toLocaleString('default', { month: 'short' });
+      months.push(monthName);
+      
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      
+      const monthTraining = await query(`
+        SELECT 
+          COUNT(*) as enrolled,
+          COUNT(CASE WHEN status = 'passed' THEN 1 END) as completed
+        FROM training_enrollments
+        WHERE enrolled_at >= $1 AND enrolled_at <= $2
+      `, [monthStart, monthEnd]);
+      
+      trainingProgress.push({
+        month: monthName,
+        enrolled: parseInt(monthTraining[0]?.enrolled || 0),
+        completed: parseInt(monthTraining[0]?.completed || 0)
+      });
+    }
+
+    // Fuel efficiency by vehicle
+    const fuelEfficiencyRes = await query(`
+      SELECT 
+        v.registration_num as vehicle,
+        COALESCE(AVG(fr.km_per_liter), 0) as efficiency
+      FROM vehicles v
+      LEFT JOIN fuel_records fr ON fr.vehicle_id = v.id
+      WHERE v.deleted_at IS NULL
+      GROUP BY v.id, v.registration_num
+      HAVING AVG(fr.km_per_liter) > 0
+      ORDER BY efficiency DESC
+      LIMIT 10
+    `);
+    
+    const fuelEfficiency = fuelEfficiencyRes.map((r: any) => ({
+      vehicle: r.vehicle,
+      efficiency: parseFloat(r.efficiency || 0)
+    }));
+
+    res.json({
+      totalVehicles,
+      activeVehicles,
+      maintenanceVehicles,
+      totalDrivers,
+      activeDrivers,
+      fleetUtilization,
+      coursesCompleted,
+      totalEnrollments,
+      monthlyFuelConsumption,
+      monthlyMaintenanceCost,
+      accidentsThisMonth,
+      vehicleStatusBreakdown,
+      trainingProgress,
+      fuelEfficiency
+    });
+  } catch (error: any) {
+    console.error('Company analytics error:', error);
+    res.status(500).json({ error: 'Failed to fetch company analytics: ' + error.message });
+  }
+}));
+
 // Get analytics summary
 router.get('/summary', async (req, res) => {
   try {

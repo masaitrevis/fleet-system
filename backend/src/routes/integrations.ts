@@ -6,8 +6,59 @@ import { query } from '../database';
 import * as apiKeyService from '../services/apiKey';
 import * as webhookService from '../services/webhook';
 import { asyncHandler, Errors } from '../middleware/errorHandler';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
 
 const router = Router();
+
+// ==================== API DOCUMENTATION (SWAGGER) ====================
+
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'NextBotics Fleet Management API',
+      version: '1.0.0',
+      description: 'REST API for fleet management system with vehicles, drivers, inventory, training, and more.',
+      contact: {
+        name: 'NextBotics Support',
+        email: 'support@nextbotics.com'
+      }
+    },
+    servers: [
+      {
+        url: process.env.API_BASE_URL || 'https://fleet-api-0272.onrender.com/api/v1',
+        description: 'Production API'
+      }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT'
+        },
+        apiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key'
+        }
+      }
+    }
+  },
+  apis: ['./src/routes/api/v1/*.ts', './src/routes/*.ts'] // Path to the API routes
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
+// Serve Swagger UI
+router.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Serve raw OpenAPI spec
+router.get('/openapi.json', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
 
 // ==================== API KEYS ====================
 
