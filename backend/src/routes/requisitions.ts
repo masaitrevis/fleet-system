@@ -621,6 +621,250 @@ router.post('/:id/reallocate', async (req: any, res) => {
   }
 });
 
+// Get dashboard stats
+router.get('/stats', async (req: any, res) => {
+  const userId = req.user?.userId;
+  const staffId = req.user?.staffId;
+  const userRole = req.user?.role;
+  const isManager = ['admin', 'manager'].includes(userRole);
+  const isDriver = userRole === 'driver';
+  
+  try {
+    // Base query conditions
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Total requests (for user's scope)
+    let totalRequestsQuery = 'SELECT COUNT(*) as count FROM requisitions';
+    let totalRequestsParams: any[] = [];
+    
+    if (!isManager && staffId) {
+      totalRequestsQuery += ' WHERE requested_by = $1';
+      totalRequestsParams.push(staffId);
+    }
+    
+    const totalRequests = await query(totalRequestsQuery, totalRequestsParams);
+    
+    // Pending approvals
+    let pendingApprovalsQuery = `SELECT COUNT(*) as count FROM requisitions r WHERE r.status = 'pending'`;
+    let pendingApprovalsParams: any[] = [];
+    
+    if (!isManager && req.user?.department) {
+      pendingApprovalsQuery += ` AND EXISTS (SELECT 1 FROM staff s WHERE s.id = r.requested_by AND s.department = $1)`;
+      pendingApprovalsParams.push(req.user.department);
+    }
+    
+    const pendingApprovals = await query(pendingApprovalsQuery, pendingApprovalsParams);
+    
+    // Pending allocations
+    const pendingAllocations = await query(`
+      SELECT COUNT(*) as count FROM requisitions WHERE status = 'approved' AND vehicle_id IS NULL
+    `);
+    
+    // My assignments (for drivers)
+    let myAssignmentsQuery = `SELECT COUNT(*) as count FROM requisitions WHERE status IN ('allocated', 'ready_for_departure', 'departed')`;
+    let myAssignmentsParams: any[] = [];
+    
+    if (isDriver && staffId) {
+      myAssignmentsQuery += ' AND driver_id = $1';
+      myAssignmentsParams.push(staffId);
+    } else if (!isManager) {
+      myAssignmentsQuery += ' AND driver_id = $1';
+      myAssignmentsParams.push(staffId || 'NONE');
+    }
+    
+    const myAssignments = await query(myAssignmentsQuery, myAssignmentsParams);
+    
+    // Completed today
+    let completedTodayQuery = `SELECT COUNT(*) as count FROM requisitions WHERE status = 'completed' AND DATE(closed_at) = CURRENT_DATE`;
+    let completedTodayParams: any[] = [];
+    
+    if (!isManager && staffId) {
+      completedTodayQuery += ' AND requested_by = $1';
+      completedTodayParams.push(staffId);
+    }
+    
+    const completedToday = await query(completedTodayQuery, completedTodayParams);
+    
+    res.json({
+      totalRequests: parseInt(totalRequests[0]?.count || 0),
+      pendingApprovals: parseInt(pendingApprovals[0]?.count || 0),
+      pendingAllocations: parseInt(pendingAllocations[0]?.count || 0),
+      myAssignments: parseInt(myAssignments[0]?.count || 0),
+      completedToday: parseInt(completedToday[0]?.count || 0)
+    });
+  } catch (error) {
+    console.error('Stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// Get active trips (driver view)
+router.get('/active-trips', async (req: any, res) => {
+  const staffId = req.user?.staffId;
+  const userRole = req.user?.role;
+  const isManager = ['admin', 'manager'].includes(userRole);
+  
+  try {
+    let queryStr = `
+      SELECT r.*, 
+        s.staff_name as requester_name, s.department,
+        v.registration_num, v.make_model,
+        d.staff_name as driver_name
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      WHERE r.status IN ('ready_for_departure', 'departed')
+    `;
+    
+    let params: any[] = [];
+    
+    // Non-managers only see their own trips
+    if (!isManager && staffId) {
+      queryStr += ` AND (r.requested_by = $1 OR r.driver_id = $1)`;
+      params.push(staffId);
+    }
+    
+    queryStr += ` ORDER BY r.travel_date DESC, r.travel_time DESC`;
+    
+    const result = await query(queryStr, params);
+    res.json(result);
+  } catch (error) {
+    console.error('Active trips error:', error);
+    res.status(500).json({ error: 'Failed to fetch active trips' });
+  }
+});
+
+// Mark trip as departed (Driver)
+router.post('/:id/depart', async (req: any, res) => {
+  const { id } = req.params;
+  const { starting_odometer } = req.body;
+  const staffId = req.user?.staffId;
+  
+  try {
+    // Verify trip is allocated to this driver
+    const checkResult = await query('SELECT * FROM requisitions WHERE id = $1', [id]);
+    if (checkResult.length === 0) {
+      return res.status(404).json({ error: 'Requisition not found' });
+    }
+    
+    const trip = checkResult[0];
+    
+    if (trip.status !== 'ready_for_departure') {
+      return res.status(400).json({ error: 'Trip is not ready for departure' });
+    }
+    
+    if (trip.driver_id !== staffId) {
+      return res.status(403).json({ error: 'Not authorized - not assigned to this trip' });
+    }
+
+    await query(`
+      UPDATE requisitions 
+      SET 
+        status = 'departed',
+        departed_at = CURRENT_TIMESTAMP,
+        starting_odometer = $1
+      WHERE id = $2
+    `, [starting_odometer || trip.starting_odometer, id]);
+
+    // Update vehicle status
+    await query(`
+      UPDATE vehicles 
+      SET status = 'On Trip', updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `, [trip.vehicle_id]);
+
+    const result = await query(`
+      SELECT r.*, v.registration_num, d.staff_name as driver_name
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      WHERE r.id = $1
+    `, [id]);
+
+    res.json({ message: 'Trip marked as departed', trip: result[0] });
+  } catch (error) {
+    console.error('Depart error:', error);
+    res.status(500).json({ error: 'Failed to mark departure' });
+  }
+});
+
+// Mark trip as completed (Driver)
+router.post('/:id/complete', async (req: any, res) => {
+  const { id } = req.params;
+  const { ending_odometer, notes } = req.body;
+  const staffId = req.user?.staffId;
+  
+  if (!ending_odometer) {
+    return res.status(400).json({ error: 'Ending odometer required' });
+  }
+  
+  try {
+    const checkResult = await query('SELECT * FROM requisitions WHERE id = $1', [id]);
+    if (checkResult.length === 0) {
+      return res.status(404).json({ error: 'Requisition not found' });
+    }
+    
+    const trip = checkResult[0];
+    
+    if (trip.status !== 'departed') {
+      return res.status(400).json({ error: 'Trip has not departed yet' });
+    }
+    
+    if (trip.driver_id !== staffId) {
+      return res.status(403).json({ error: 'Not authorized - not assigned to this trip' });
+    }
+
+    const distance = ending_odometer - (trip.starting_odometer || 0);
+
+    await query(`
+      UPDATE requisitions 
+      SET 
+        status = 'completed',
+        completed_at = CURRENT_TIMESTAMP,
+        ending_odometer = $1,
+        distance_km = $2,
+        completion_notes = $3
+      WHERE id = $4
+    `, [ending_odometer, distance, notes || '', id]);
+
+    // Update vehicle mileage and status
+    await query(`
+      UPDATE vehicles 
+      SET 
+        status = 'Active', 
+        current_mileage = $1,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [ending_odometer, trip.vehicle_id]);
+
+    const result = await query(`
+      SELECT r.*, v.registration_num, d.staff_name as driver_name, s.staff_name as requester_name
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1
+    `, [id]);
+
+    // Send notification email
+    emailService.sendTripCompleted(
+      result[0].requester_name,
+      result[0].registration_num,
+      distance
+    ).catch((err: any) => console.error('Email failed:', err));
+
+    res.json({ 
+      message: 'Trip completed successfully', 
+      trip: result[0],
+      distance
+    });
+  } catch (error) {
+    console.error('Complete error:', error);
+    res.status(500).json({ error: 'Failed to complete trip' });
+  }
+});
+
 // ========== SECURITY GATE MANAGEMENT ==========
 
 // Get vehicles ready for departure (allocated and inspected)
