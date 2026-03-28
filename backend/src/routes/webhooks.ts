@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { query } from '../database';
@@ -14,7 +14,7 @@ router.use(authenticateToken);
  * List all webhooks for the current user
  * GET /webhooks
  */
-router.get('/', asyncHandler(async (req: any, res) => {
+router.get('/', asyncHandler(async (req: any, res: Response) => {
   const userId = req.user?.userId;
   const userRole = req.user?.role;
   
@@ -45,7 +45,7 @@ router.get('/', asyncHandler(async (req: any, res) => {
  * Create a new webhook
  * POST /webhooks
  */
-router.post('/', asyncHandler(async (req: any, res) => {
+router.post('/', asyncHandler(async (req: any, res: Response) => {
   const userId = req.user?.userId;
   const { url, event_types, secret, description, headers } = req.body;
   
@@ -101,7 +101,7 @@ router.post('/', asyncHandler(async (req: any, res) => {
  * Get webhook details
  * GET /webhooks/:id
  */
-router.get('/:id', asyncHandler(async (req: any, res) => {
+router.get('/:id', asyncHandler(async (req: any, res: Response) => {
   const { id } = req.params;
   const userId = req.user?.userId;
   const userRole = req.user?.role;
@@ -127,7 +127,7 @@ router.get('/:id', asyncHandler(async (req: any, res) => {
  * Update a webhook
  * PUT /webhooks/:id
  */
-router.put('/:id', asyncHandler(async (req: any, res) => {
+router.put('/:id', asyncHandler(async (req: any, res: Response) => {
   const { id } = req.params;
   const userId = req.user?.userId;
   const userRole = req.user?.role;
@@ -208,7 +208,7 @@ router.put('/:id', asyncHandler(async (req: any, res) => {
  * Delete a webhook
  * DELETE /webhooks/:id
  */
-router.delete('/:id', asyncHandler(async (req: any, res) => {
+router.delete('/:id', asyncHandler(async (req: any, res: Response) => {
   const { id } = req.params;
   const userId = req.user?.userId;
   const userRole = req.user?.role;
@@ -225,7 +225,7 @@ router.delete('/:id', asyncHandler(async (req: any, res) => {
  * Get webhook delivery history
  * GET /webhooks/:id/deliveries
  */
-router.get('/:id/deliveries', asyncHandler(async (req: any, res) => {
+router.get('/:id/deliveries', asyncHandler(async (req: any, res: Response) => {
   const { id } = req.params;
   const userId = req.user?.userId;
   const userRole = req.user?.role;
@@ -253,7 +253,7 @@ router.get('/:id/deliveries', asyncHandler(async (req: any, res) => {
  * Test a webhook
  * POST /webhooks/:id/test
  */
-router.post('/:id/test', asyncHandler(async (req: any, res) => {
+router.post('/:id/test', asyncHandler(async (req: any, res: Response) => {
   const { id } = req.params;
   const userId = req.user?.userId;
   const userRole = req.user?.role;

@@ -1,8 +1,8 @@
-import { Router } from 'express';
-import { authenticateToken, authenticateApiKey } from '../../middleware/auth';
-import { asyncHandler } from '../../middleware/errorHandler';
-import { query } from '../../database';
-import { emitWebhookEvent } from '../../services/webhook';
+import { Router, Request, Response } from 'express';
+import { authenticateToken, authenticateApiKey } from '../../../middleware/auth';
+import { asyncHandler } from '../../../middleware/errorHandler';
+import { query } from '../../../database';
+import { emitWebhookEvent } from '../../../services/webhook';
 
 const router = Router();
 
@@ -32,7 +32,7 @@ router.use(auth);
  *       - bearerAuth: []
  *       - apiKeyAuth: []
  */
-router.get('/vehicles', asyncHandler(async (req: any, res) => {
+router.get('/vehicles', asyncHandler(async (req: any, res: Response) => {
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
   
@@ -62,7 +62,7 @@ router.get('/vehicles', asyncHandler(async (req: any, res) => {
  *     summary: Get vehicle details
  *     tags: [Vehicles]
  */
-router.get('/vehicles/:id', asyncHandler(async (req: any, res) => {
+router.get('/vehicles/:id', asyncHandler(async (req: any, res: Response) => {
   const { id } = req.params;
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
@@ -93,7 +93,7 @@ router.get('/vehicles/:id', asyncHandler(async (req: any, res) => {
  *     summary: List all drivers
  *     tags: [Drivers]
  */
-router.get('/drivers', asyncHandler(async (req: any, res) => {
+router.get('/drivers', asyncHandler(async (req: any, res: Response) => {
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
   
@@ -126,7 +126,7 @@ router.get('/drivers', asyncHandler(async (req: any, res) => {
  *     summary: Get driver performance metrics
  *     tags: [Drivers]
  */
-router.get('/drivers/:id/performance', asyncHandler(async (req: any, res) => {
+router.get('/drivers/:id/performance', asyncHandler(async (req: any, res: Response) => {
   const { id } = req.params;
   const companyId = req.user?.companyId;
   
@@ -171,7 +171,7 @@ router.get('/drivers/:id/performance', asyncHandler(async (req: any, res) => {
  *     summary: List inventory items
  *     tags: [Inventory]
  */
-router.get('/inventory', asyncHandler(async (req: any, res) => {
+router.get('/inventory', asyncHandler(async (req: any, res: Response) => {
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
   const { low_stock } = req.query;
@@ -223,7 +223,7 @@ router.get('/inventory', asyncHandler(async (req: any, res) => {
  *     summary: List inventory categories
  *     tags: [Inventory]
  */
-router.get('/inventory/categories', asyncHandler(async (req: any, res) => {
+router.get('/inventory/categories', asyncHandler(async (req: any, res: Response) => {
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
   
@@ -250,7 +250,7 @@ router.get('/inventory/categories', asyncHandler(async (req: any, res) => {
  *     summary: List training courses
  *     tags: [Training]
  */
-router.get('/courses', asyncHandler(async (req: any, res) => {
+router.get('/courses', asyncHandler(async (req: any, res: Response) => {
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
   
@@ -275,7 +275,7 @@ router.get('/courses', asyncHandler(async (req: any, res) => {
  *     summary: Get course enrollment statistics
  *     tags: [Training]
  */
-router.get('/courses/:id/enrollments', asyncHandler(async (req: any, res) => {
+router.get('/courses/:id/enrollments', asyncHandler(async (req: any, res: Response) => {
   const { id } = req.params;
   
   const stats = await query(`
@@ -300,7 +300,7 @@ router.get('/courses/:id/enrollments', asyncHandler(async (req: any, res) => {
  *     summary: Get system alerts
  *     tags: [Alerts]
  */
-router.get('/alerts', asyncHandler(async (req: any, res) => {
+router.get('/alerts', asyncHandler(async (req: any, res: Response) => {
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
   const { type, severity } = req.query;
@@ -343,7 +343,7 @@ router.get('/alerts', asyncHandler(async (req: any, res) => {
  *     summary: List invoices
  *     tags: [Invoices]
  */
-router.get('/invoices', asyncHandler(async (req: any, res) => {
+router.get('/invoices', asyncHandler(async (req: any, res: Response) => {
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
   const { status } = req.query;
@@ -382,7 +382,7 @@ router.get('/invoices', asyncHandler(async (req: any, res) => {
  *     summary: Get invoice details
  *     tags: [Invoices]
  */
-router.get('/invoices/:id', asyncHandler(async (req: any, res) => {
+router.get('/invoices/:id', asyncHandler(async (req: any, res: Response) => {
   const { id } = req.params;
   
   const [invoices, items] = await Promise.all([
@@ -411,7 +411,7 @@ router.get('/invoices/:id', asyncHandler(async (req: any, res) => {
  *     summary: Get maintenance schedule and alerts
  *     tags: [Maintenance]
  */
-router.get('/maintenance', asyncHandler(async (req: any, res) => {
+router.get('/maintenance', asyncHandler(async (req: any, res: Response) => {
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
   
@@ -475,7 +475,7 @@ router.get('/maintenance', asyncHandler(async (req: any, res) => {
  *     summary: Get dashboard summary
  *     tags: [Dashboard]
  */
-router.get('/dashboard', asyncHandler(async (req: any, res) => {
+router.get('/dashboard', asyncHandler(async (req: any, res: Response) => {
   const companyId = req.user?.companyId;
   const userRole = req.user?.role;
   

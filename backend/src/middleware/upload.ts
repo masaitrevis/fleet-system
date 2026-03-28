@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import sharp from 'sharp';
+// import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 
 // Ensure upload directories exist
@@ -39,7 +39,7 @@ export const upload = multer({
   }
 });
 
-// Image optimization settings
+// Image optimization settings (disabled - sharp not installed)
 const OPTIMIZATION_CONFIG = {
   maxWidth: 1920,
   maxHeight: 1920,
@@ -50,7 +50,7 @@ const OPTIMIZATION_CONFIG = {
 };
 
 /**
- * Optimize and save image with thumbnail
+ * Save image without processing (sharp disabled)
  */
 export const optimizeImage = async (
   buffer: Buffer,
@@ -59,41 +59,16 @@ export const optimizeImage = async (
 ): Promise<{ imageUrl: string; thumbnailUrl: string; fileSize: number; mimeType: string }> => {
   // Create company-specific subdirectory if companyId provided
   const companyDir = companyId ? path.join(PHOTOS_DIR, companyId) : PHOTOS_DIR;
-  const companyThumbDir = companyId ? path.join(THUMBNAILS_DIR, companyId) : THUMBNAILS_DIR;
   
-  [companyDir, companyThumbDir].forEach(dir => {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-  });
+  if (!fs.existsSync(companyDir)) {
+    fs.mkdirSync(companyDir, { recursive: true });
+  }
 
   const uniqueName = `${uuidv4()}-${filename}`;
   const imagePath = path.join(companyDir, uniqueName);
-  const thumbnailPath = path.join(companyThumbDir, `thumb-${uniqueName}`);
 
-  // Process main image
-  const processedImage = await sharp(buffer)
-    .resize(OPTIMIZATION_CONFIG.maxWidth, OPTIMIZATION_CONFIG.maxHeight, {
-      fit: 'inside',
-      withoutEnlargement: true
-    })
-    .jpeg({ quality: OPTIMIZATION_CONFIG.quality, progressive: true })
-    .toBuffer();
-
-  // Save main image
-  await fs.promises.writeFile(imagePath, processedImage);
-
-  // Create thumbnail
-  const thumbnailBuffer = await sharp(buffer)
-    .resize(OPTIMIZATION_CONFIG.thumbnailWidth, OPTIMIZATION_CONFIG.thumbnailHeight, {
-      fit: 'cover',
-      position: 'centre'
-    })
-    .jpeg({ quality: OPTIMIZATION_CONFIG.thumbnailQuality })
-    .toBuffer();
-
-  // Save thumbnail
-  await fs.promises.writeFile(thumbnailPath, thumbnailBuffer);
+  // Save raw image (no processing without sharp)
+  await fs.promises.writeFile(imagePath, buffer);
 
   // Generate URLs (relative paths)
   const baseUrl = process.env.UPLOAD_BASE_URL || '/uploads';
@@ -101,30 +76,24 @@ export const optimizeImage = async (
   
   return {
     imageUrl: `${baseUrl}/photos${companyPath}/${uniqueName}`,
-    thumbnailUrl: `${baseUrl}/thumbnails${companyPath}/thumb-${uniqueName}`,
-    fileSize: processedImage.length,
+    thumbnailUrl: `${baseUrl}/photos${companyPath}/${uniqueName}`, // Same as main image
+    fileSize: buffer.length,
     mimeType: 'image/jpeg'
   };
 };
 
 /**
- * Delete image and thumbnail
+ * Delete image
  */
 export const deleteImage = async (imageUrl: string): Promise<void> => {
   try {
     const basePath = process.env.UPLOAD_BASE_URL || '/uploads';
     const relativePath = imageUrl.replace(basePath, '');
     const fullPath = path.join(UPLOAD_DIR, relativePath);
-    const thumbnailPath = fullPath.replace('/photos/', '/thumbnails/').replace(/([^/]+)$/, 'thumb-$1');
 
     // Delete main image
     if (fs.existsSync(fullPath)) {
       await fs.promises.unlink(fullPath);
-    }
-
-    // Delete thumbnail
-    if (fs.existsSync(thumbnailPath)) {
-      await fs.promises.unlink(thumbnailPath);
     }
   } catch (error) {
     console.error('Error deleting image:', error);

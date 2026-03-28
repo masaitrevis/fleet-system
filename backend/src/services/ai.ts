@@ -1925,10 +1925,10 @@ Return ONLY a JSON array in this exact format:
       temperature: 0.7
     });
 
-    const content = response.choices[0].message.content || '[]';
+    const responseContent = response.choices[0].message.content || '[]';
     // Extract JSON from possible markdown code blocks
-    const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/\[[\s\S]*\]/);
-    const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : content;
+    const jsonMatch = responseContent.match(/```json\n?([\s\S]*?)\n?```/) || responseContent.match(/\[[\s\S]*\]/);
+    const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : responseContent;
     
     const questions = JSON.parse(jsonStr);
     

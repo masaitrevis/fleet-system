@@ -1,31 +1,33 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
 import Login from './components/Login';
-import Dashboard from './components/Dashboard';
-import Fleet from './components/Fleet';
-import Staff from './components/Staff';
-import RoutesComponent from './components/Routes';
-import Fuel from './components/Fuel';
-import Repairs from './components/Repairs';
-import Upload from './components/Upload';
-import Reports from './components/Reports';
-import Analytics from './components/Analytics';
-import Accidents from './components/Accidents';
-import Training from './components/Training';
-import RequisitionModule from './components/requisition/RequisitionModule';
-import SecurityDashboard from './components/SecurityDashboard';
-import IntegrationsPage from './pages/IntegrationsPage';
-import SettingsPage from './pages/SettingsPage';
-import AuditsPage from './pages/AuditsPage';
-import AuditDetailPage from './pages/AuditDetailPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getEffectiveRole } from './utils/roles';
 
-import Admin from './components/Admin';
-import OperationsDashboard from './components/OperationsDashboard';
-import Workshop from './components/Workshop/Workshop';
-import AIChatbot from './components/AIChatbot';
+// Lazy load all page components for code-splitting
+// This creates separate chunks for each route, reducing initial bundle size
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const Fleet = lazy(() => import('./components/Fleet'));
+const Staff = lazy(() => import('./components/Staff'));
+const RoutesComponent = lazy(() => import('./components/Routes'));
+const Fuel = lazy(() => import('./components/Fuel'));
+const Repairs = lazy(() => import('./components/Repairs'));
+const Upload = lazy(() => import('./components/Upload'));
+const Reports = lazy(() => import('./components/Reports'));
+const Analytics = lazy(() => import('./components/Analytics'));
+const Accidents = lazy(() => import('./components/Accidents'));
+const Training = lazy(() => import('./components/Training'));
+const RequisitionModule = lazy(() => import('./components/requisition/RequisitionModule'));
+const SecurityDashboard = lazy(() => import('./components/SecurityDashboard'));
+const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AuditsPage = lazy(() => import('./pages/AuditsPage'));
+const AuditDetailPage = lazy(() => import('./pages/AuditDetailPage'));
+const Admin = lazy(() => import('./components/Admin'));
+const OperationsDashboard = lazy(() => import('./components/OperationsDashboard'));
+const Workshop = lazy(() => import('./components/Workshop/Workshop'));
+const AIChatbot = lazy(() => import('./components/AIChatbot'));
 
 export type View = 'dashboard' | 'fleet' | 'staff' | 'routes' | 'fuel' | 'repairs' | 'upload' | 'reports' | 'analytics' | 'accidents' | 'audits' | 'training' | 'requisitions' | 'security' | 'integrations' | 'settings' | 'operations' | 'workshop' | 'admin';
 
@@ -54,6 +56,18 @@ const navItems: { key: View; label: string; icon: string; roles: string[]; path:
   { key: 'settings', label: 'Settings', icon: '⚙️', roles: ['admin', 'manager', 'hod'], path: '/settings' },
   { key: 'admin', label: 'Admin', icon: '🔧', roles: ['admin'], path: '/admin' },
 ];
+
+// Loading fallback component for Suspense
+function PageLoader() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+        <p className="text-gray-500">Loading page...</p>
+      </div>
+    </div>
+  );
+}
 
 function AppLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -154,34 +168,36 @@ function AppLayout() {
         />
       )}
 
-      {/* Main Content */}
+      {/* Main Content with Suspense for lazy-loaded routes */}
       <main className="flex-1 p-4 md:p-8 overflow-auto min-h-0">
         <ErrorBoundary>
-          <Routes>
-            <Route path="/" element={<Dashboard apiUrl={API_URL} user={user} />} />
-            <Route path="/security" element={<SecurityDashboard apiUrl={API_URL} user={user} />} />
-            <Route path="/requisitions" element={<RequisitionModule apiUrl={API_URL} user={user} />} />
-            <Route path="/accidents" element={<Accidents apiUrl={API_URL} user={user} />} />
-            <Route path="/audits" element={<AuditsPage apiUrl={API_URL} user={user} />} />
-            <Route path="/audits/:id" element={<AuditDetailPage apiUrl={API_URL} user={user} />} />
-            
-            <Route path="/training" element={<Training apiUrl={API_URL} user={user} />} />
-            <Route path="/operations" element={<OperationsDashboard apiUrl={API_URL} user={user} />} />
-            <Route path="/workshop" element={<Workshop apiUrl={API_URL} user={user} />} />
-            <Route path="/fleet" element={<Fleet apiUrl={API_URL} />} />
-            <Route path="/staff" element={<Staff apiUrl={API_URL} />} />
-            <Route path="/routes" element={<RoutesComponent apiUrl={API_URL} />} />
-            <Route path="/fuel" element={<Fuel apiUrl={API_URL} />} />
-            <Route path="/repairs" element={<Repairs apiUrl={API_URL} />} />
-            <Route path="/analytics" element={<Analytics apiUrl={API_URL} />} />
-            <Route path="/upload" element={<Upload apiUrl={API_URL} />} />
-            <Route path="/reports" element={<Reports apiUrl={API_URL} />} />
-            <Route path="/integrations" element={<IntegrationsPage apiUrl={API_URL} />} />
-            <Route path="/settings" element={<SettingsPage apiUrl={API_URL} />} />
-            <Route path="/admin" element={<Admin apiUrl={API_URL} />} />
-            
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<Dashboard apiUrl={API_URL} user={user} />} />
+              <Route path="/security" element={<SecurityDashboard apiUrl={API_URL} user={user} />} />
+              <Route path="/requisitions" element={<RequisitionModule apiUrl={API_URL} user={user} />} />
+              <Route path="/accidents" element={<Accidents apiUrl={API_URL} user={user} />} />
+              <Route path="/audits" element={<AuditsPage apiUrl={API_URL} user={user} />} />
+              <Route path="/audits/:id" element={<AuditDetailPage apiUrl={API_URL} user={user} />} />
+              
+              <Route path="/training" element={<Training apiUrl={API_URL} user={user} />} />
+              <Route path="/operations" element={<OperationsDashboard apiUrl={API_URL} user={user} />} />
+              <Route path="/workshop" element={<Workshop apiUrl={API_URL} user={user} />} />
+              <Route path="/fleet" element={<Fleet apiUrl={API_URL} />} />
+              <Route path="/staff" element={<Staff apiUrl={API_URL} />} />
+              <Route path="/routes" element={<RoutesComponent apiUrl={API_URL} />} />
+              <Route path="/fuel" element={<Fuel apiUrl={API_URL} />} />
+              <Route path="/repairs" element={<Repairs apiUrl={API_URL} />} />
+              <Route path="/analytics" element={<Analytics apiUrl={API_URL} />} />
+              <Route path="/upload" element={<Upload apiUrl={API_URL} />} />
+              <Route path="/reports" element={<Reports apiUrl={API_URL} />} />
+              <Route path="/integrations" element={<IntegrationsPage apiUrl={API_URL} />} />
+              <Route path="/settings" element={<SettingsPage apiUrl={API_URL} />} />
+              <Route path="/admin" element={<Admin apiUrl={API_URL} />} />
+              
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </main>
 

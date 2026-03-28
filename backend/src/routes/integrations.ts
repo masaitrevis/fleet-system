@@ -6,13 +6,14 @@ import { query } from '../database';
 import * as apiKeyService from '../services/apiKey';
 import * as webhookService from '../services/webhook';
 import { asyncHandler, Errors } from '../middleware/errorHandler';
-import swaggerUi from 'swagger-ui-express';
-import swaggerJsdoc from 'swagger-jsdoc';
+// import swaggerUi from 'swagger-ui-express';
+// import swaggerJsdoc from 'swagger-jsdoc';
 
 const router = Router();
 
 // ==================== API DOCUMENTATION (SWAGGER) ====================
-
+// Commented out - swagger packages not installed
+/*
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -46,7 +47,7 @@ const swaggerOptions = {
       }
     }
   },
-  apis: ['./src/routes/api/v1/*.ts', './src/routes/*.ts'] // Path to the API routes
+  apis: ['./src/routes/api/v1/*.ts', './src/routes/*.ts']
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
@@ -59,6 +60,7 @@ router.get('/openapi.json', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/json');
   res.send(swaggerSpec);
 });
+*/
 
 // ==================== API KEYS ====================
 

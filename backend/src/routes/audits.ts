@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { query } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateToken } from '../middleware/auth';
-import { allAuditTemplates, getMaturityRating } from '../../../shared/auditTemplates';
+import { allAuditTemplates, getMaturityRating } from '../shared/auditTemplates';
 
 const router = Router();
 
@@ -765,7 +765,7 @@ router.get('/sessions/:id/pdf', async (req: Request, res: Response) => {
             </tr>
           </thead>
           <tbody>
-            ${responses.map((r, idx) => `
+            ${responses.map((r: any, idx: number) => `
               <tr>
                 <td>${idx + 1}</td>
                 <td>${r.module_name}</td>
@@ -789,7 +789,7 @@ router.get('/sessions/:id/pdf', async (req: Request, res: Response) => {
               </tr>
             </thead>
             <tbody>
-              ${correctiveActions.map(a => `
+              ${correctiveActions.map((a: any) => `
                 <tr>
                   <td>${a.issue_identified}</td>
                   <td>${a.corrective_action}</td>
