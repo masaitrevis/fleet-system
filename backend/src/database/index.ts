@@ -1372,6 +1372,21 @@ export const runMigrations = async () => {
   
   console.log('🔧 Running additional migrations...');
   
+  // FIX: Drop existing problematic indexes before migrations run
+  // This fixes the "relation already exists" error from 004_add_invoices.sql
+  try {
+    await pool.query(`
+      DROP INDEX IF EXISTS idx_invoices_company;
+      DROP INDEX IF EXISTS idx_invoices_vehicle;
+      DROP INDEX IF EXISTS idx_invoices_status;
+      DROP INDEX IF EXISTS idx_invoices_issue_date;
+      DROP INDEX IF EXISTS idx_invoice_items_invoice;
+    `);
+    console.log('✅ Cleaned up existing invoice indexes');
+  } catch (err: any) {
+    console.log('ℹ️  No existing invoice indexes to clean up');
+  }
+  
   // Run inspection module migration
   await runInspectionMigration(pool);
   

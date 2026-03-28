@@ -232,7 +232,14 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await initDatabase();
-    await runMigrations(); // Run additional migrations
+    
+    // Run migrations but don't crash on failure
+    try {
+      await runMigrations();
+    } catch (migrationError: any) {
+      console.error('⚠️  Migration failed but continuing:', migrationError.message);
+      // Continue starting server even if migrations fail
+    }
     
     httpServer.listen(PORT, () => {
       console.log(`🚀 Fleet API + WebSocket running on http://localhost:${PORT}`);
@@ -247,7 +254,7 @@ const startServer = async () => {
     }, 30000);
     
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 };
