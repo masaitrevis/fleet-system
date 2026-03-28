@@ -139,6 +139,10 @@ app.locals.io = io;
 app.options('*', cors());
 
 // Health check (public)
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'Fleet API is running', timestamp: new Date().toISOString() });
+});
+
 app.get('/api/health', async (req, res) => {
   let dbStatus = 'unknown';
   let adminUser = null;
